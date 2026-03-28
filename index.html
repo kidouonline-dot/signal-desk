@@ -2,9 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
+
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -401,19 +399,7 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 </head>
 <body>
 
-<script>
-// Cache busting - force reload if stale
-(function(){
-  var v = "202603281311";
-  var stored = sessionStorage.getItem('sdp_version');
-  if(stored && stored !== v){
-    sessionStorage.setItem('sdp_version', v);
-    window.location.reload(true);
-  } else {
-    sessionStorage.setItem('sdp_version', v);
-  }
-})();
-</script>
+
 <div id="loading">
   <div class="ld-mark">S</div>
   <div class="ld-txt">Signal Desk Pro · Initialisation</div>

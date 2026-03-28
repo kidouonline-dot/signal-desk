@@ -568,6 +568,8 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 
 <script>
 var VERSION='202603281500';
+var TD_KEY = '27be7dbb09744774a1a9003abb9a6d7e';
+var TD = 'https://api.twelvedata.com';
 var AV_KEY = '4V88IGO8RAI5OASJ';
 var GM_KEY = 'AIzaSyCPr96oEk2OHmbFWGE82oFK__OXq0gm_H4';
 var GM_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent';
@@ -605,100 +607,51 @@ var CAL = [];
 var FAVS = new Set();
 var favF = 'ALL';
 
-// ALPHA VANTAGE HELPERS (15min delay, CORS ok)
-var lastAVcall = 0;
-async function avFetch(params){
-  var now = Date.now();
-  var wait = Math.max(0, 1200 - (now - lastAVcall)); // max 5 calls/min on free plan
-  if(wait > 0) await new Promise(function(r){setTimeout(r,wait);});
-  lastAVcall = Date.now();
-  var url = AV + '?' + params + '&apikey=' + AV_KEY;
-  var r = await fetch(url);
+// TWELVE DATA - CORS ok, 800 req/day gratuit
+var tdCache = {};
+var lastTDcall = 0;
+
+function toTDSym(sym){
+  var mp = {'OANDA:SPX500_USD':'SPX','OANDA:EUR_USD':'EUR/USD','OANDA:GBP_USD':'GBP/USD','OANDA:USD_JPY':'USD/JPY','OANDA:XAU_USD':'XAU/USD','OANDA:FR40_EUR':'CAC40','OANDA:DE30_EUR':'DAX','BINANCE:BTCUSDT':'BTC/USD','BINANCE:ETHUSDT':'ETH/USD'};
+  return mp[sym] || sym.replace(/.*:/,'');
+}
+
+async function tdFetch(endpoint, params){
+  var now=Date.now(), wait=Math.max(0,500-(now-lastTDcall));
+  if(wait>0) await new Promise(function(r){setTimeout(r,wait);});
+  lastTDcall=Date.now();
+  var r=await fetch(TD+endpoint+'?apikey='+TD_KEY+'&'+params);
   return r.json();
 }
 
-// Map our symbols to Alpha Vantage symbols
-function toAVSym(sym){
-  var map = {
-    'OANDA:SPX500_USD':'SPY','OANDA:EUR_USD':'EUR','OANDA:GBP_USD':'GBP',
-    'OANDA:USD_JPY':'JPY','OANDA:XAU_USD':'GLD','OANDA:XBR_USD':'USO',
-    'OANDA:FR40_EUR':'EWQ','OANDA:DE30_EUR':'EWG','OANDA:WTICO_USD':'USO',
-    'BINANCE:BTCUSDT':'BTC','BINANCE:ETHUSDT':'ETH',
-  };
-  return map[sym] || sym.replace(/.*:/,'');
-}
-
-var avCache = {};
 async function avQuote(sym){
-  var avSym = toAVSym(sym);
-  var cacheKey = 'q_'+avSym;
-  if(avCache[cacheKey] && Date.now()-avCache[cacheKey].ts < 60000) return avCache[cacheKey].data;
+  var ts=toTDSym(sym), ck='q_'+ts;
+  if(tdCache[ck]&&Date.now()-tdCache[ck].ts<30000) return tdCache[ck].data;
   try{
-    var isCrypto = sym.indexOf('BINANCE')>=0 || avSym==='BTC'||avSym==='ETH';
-    var isForex = sym.indexOf('OANDA')>=0 && (avSym==='EUR'||avSym==='GBP'||avSym==='JPY');
-    var d;
-    if(isCrypto){
-      d = await avFetch('function=CURRENCY_EXCHANGE_RATE&from_currency='+avSym+'&to_currency=USD');
-      var rate = d['Realtime Currency Exchange Rate'];
-      if(rate){
-        var price = parseFloat(rate['5. Exchange Rate']);
-        var prev = parseFloat(rate['8. Bid Price'])||price;
-        var result = {c:price, pc:prev, h:price, l:price, o:price, v:0};
-        avCache[cacheKey]={data:result,ts:Date.now()};
-        return result;
-      }
-    } else if(isForex){
-      d = await avFetch('function=CURRENCY_EXCHANGE_RATE&from_currency='+avSym+'&to_currency=USD');
-      var rate2 = d['Realtime Currency Exchange Rate'];
-      if(rate2){
-        var price2 = parseFloat(rate2['5. Exchange Rate']);
-        var result2 = {c:price2, pc:price2*0.999, h:price2, l:price2, o:price2, v:0};
-        avCache[cacheKey]={data:result2,ts:Date.now()};
-        return result2;
-      }
-    } else {
-      d = await avFetch('function=GLOBAL_QUOTE&symbol='+avSym);
-      var q = d['Global Quote'];
-      if(q && q['05. price']){
-        var result3 = {c:parseFloat(q['05. price']), pc:parseFloat(q['08. previous close']), h:parseFloat(q['03. high']), l:parseFloat(q['04. low']), o:parseFloat(q['02. open']), v:parseInt(q['06. volume'])||0};
-        avCache[cacheKey]={data:result3,ts:Date.now()};
-        return result3;
-      }
+    var d=await tdFetch('/quote','symbol='+encodeURIComponent(ts));
+    if(d&&d.close){
+      var res={c:parseFloat(d.close),pc:parseFloat(d.previous_close)||parseFloat(d.close),h:parseFloat(d.high)||0,l:parseFloat(d.low)||0,o:parseFloat(d.open)||0,v:parseInt(d.volume)||0,dp:parseFloat(d.percent_change)||0};
+      tdCache[ck]={data:res,ts:Date.now()};
+      return res;
     }
   }catch(e){}
   return null;
 }
 
 async function avCandles(sym){
-  var avSym = toAVSym(sym);
-  var cacheKey = 'c_'+avSym;
-  if(avCache[cacheKey] && Date.now()-avCache[cacheKey].ts < 300000) return avCache[cacheKey].data;
+  var ts=toTDSym(sym), ck='c_'+ts;
+  if(tdCache[ck]&&Date.now()-tdCache[ck].ts<300000) return tdCache[ck].data;
   try{
-    var isCrypto = sym.indexOf('BINANCE')>=0||avSym==='BTC'||avSym==='ETH';
-    var d;
-    if(isCrypto){
-      d = await avFetch('function=DIGITAL_CURRENCY_DAILY&symbol='+avSym+'&market=USD');
-      var ts = d['Time Series (Digital Currency Daily)'];
-      if(ts){
-        var closes = Object.keys(ts).slice(0,60).map(function(k){return parseFloat(ts[k]['4a. close (USD)']||ts[k]['4. close']);});
-        avCache[cacheKey]={data:closes.reverse(),ts:Date.now()};
-        return closes.reverse();
-      }
-    } else {
-      d = await avFetch('function=TIME_SERIES_DAILY&symbol='+avSym+'&outputsize=compact');
-      var ts2 = d['Time Series (Daily)'];
-      if(ts2){
-        var closes2 = Object.keys(ts2).slice(0,60).map(function(k){return parseFloat(ts2[k]['4. close']);});
-        avCache[cacheKey]={data:closes2.reverse(),ts:Date.now()};
-        return closes2.reverse();
-      }
+    var d=await tdFetch('/time_series','symbol='+encodeURIComponent(ts)+'&interval=1day&outputsize=60');
+    if(d&&d.values&&d.values.length>0){
+      var cl=d.values.map(function(v){return parseFloat(v.close);}).reverse();
+      tdCache[ck]={data:cl,ts:Date.now()};
+      return cl;
     }
   }catch(e){}
   return [];
 }
 
-
-function toYFSym(sym){ return toAVSym(sym); }
 async function yfQuote(sym){ return avQuote(sym); }
 async function yfCandles(sym){ return avCandles(sym); }
 
@@ -1101,41 +1054,46 @@ var AGENTS = [
 var fundCache = {};
 
 async function fetchFinnhubData(ticker){
-  var result = {quote:null, overview:null};
+  var result = {quote:null, overview:null, stats:null};
   var st = document.getElementById('fp-status');
   try{
-    if(st) st.textContent = 'Alpha Vantage: cours en temps reel…';
+    if(st) st.textContent = 'Twelve Data: cours en temps reel…';
     result.quote = await avQuote(ticker);
   }catch(e){}
   try{
-    if(st) st.textContent = 'Alpha Vantage: donnees fondamentales…';
-    var d = await avFetch('function=OVERVIEW&symbol='+ticker);
-    if(d && d.Symbol) result.overview = d;
+    if(st) st.textContent = 'Twelve Data: statistiques…';
+    var d = await tdFetch('/statistics', 'symbol='+encodeURIComponent(ticker));
+    if(d && d.statistics) result.stats = d.statistics;
+  }catch(e){}
+  try{
+    if(st) st.textContent = 'Twelve Data: profil entreprise…';
+    var d2 = await tdFetch('/profile', 'symbol='+encodeURIComponent(ticker));
+    if(d2 && d2.name) result.overview = d2;
   }catch(e){}
   return result;
 }
 
 function buildDataCtx(ticker, fd){
-  var q=fd.quote||{}, ov=fd.overview||{};
+  var q=fd.quote||{}, ov=fd.overview||{}, st=fd.stats||{};
+  var vs=st.valuations_metrics||{}, fin=st.financials||{}, ps=st.price_stats||{};
   var L=[];
-  L.push('=== DONNEES ALPHA VANTAGE TEMPS REEL ===');
+  L.push('=== DONNEES TWELVE DATA TEMPS REEL ===');
   L.push('Ticker: '+ticker);
-  if(ov.Name) L.push('Societe: '+ov.Name+' | Secteur: '+(ov.Sector||'N/A')+' | Industrie: '+(ov.Industry||'N/A'));
-  if(ov.MarketCapitalization) L.push('Market Cap: $'+Math.round(parseInt(ov.MarketCapitalization)/1e9)+'B');
-  if(q&&q.c) L.push('Prix actuel: $'+q.c+' | Var jour: '+((q.c-q.pc)/Math.max(q.pc,0.001)*100).toFixed(2)+'%');
-  if(ov['52WeekHigh']) L.push('52S High: $'+ov['52WeekHigh']+' | 52S Low: $'+ov['52WeekLow']);
-  if(ov.PERatio&&ov.PERatio!='None') L.push('P/E TTM: '+parseFloat(ov.PERatio).toFixed(1));
-  if(ov.PriceToBookRatio&&ov.PriceToBookRatio!='None') L.push('P/B: '+parseFloat(ov.PriceToBookRatio).toFixed(2));
-  if(ov.EVToEBITDA&&ov.EVToEBITDA!='None') L.push('EV/EBITDA: '+parseFloat(ov.EVToEBITDA).toFixed(1));
-  if(ov.EPS&&ov.EPS!='None') L.push('EPS TTM: $'+parseFloat(ov.EPS).toFixed(2));
-  if(ov.RevenueGrowthYOY&&ov.RevenueGrowthYOY!='None') L.push('Croissance CA: '+(parseFloat(ov.RevenueGrowthYOY)*100).toFixed(1)+'%');
-  if(ov.ProfitMargin&&ov.ProfitMargin!='None') L.push('Marge nette: '+(parseFloat(ov.ProfitMargin)*100).toFixed(1)+'%');
-  if(ov.GrossProfitTTM&&ov.GrossProfitTTM!='None') L.push('Gross Profit TTM: $'+Math.round(parseInt(ov.GrossProfitTTM)/1e9)+'B');
-  if(ov.ReturnOnEquityTTM&&ov.ReturnOnEquityTTM!='None') L.push('ROE: '+(parseFloat(ov.ReturnOnEquityTTM)*100).toFixed(1)+'%');
-  if(ov.DividendYield&&ov.DividendYield!='None') L.push('Dividende: '+(parseFloat(ov.DividendYield)*100).toFixed(2)+'%');
-  if(ov.Beta&&ov.Beta!='None') L.push('Beta: '+parseFloat(ov.Beta).toFixed(2));
-  if(ov.AnalystTargetPrice&&ov.AnalystTargetPrice!='None') L.push('Prix cible analyste: $'+ov.AnalystTargetPrice);
-  if(ov.Description) L.push('Description: '+ov.Description.substring(0,200));
+  if(ov.name) L.push('Societe: '+ov.name+' | Secteur: '+(ov.sector||'N/A')+' | Industrie: '+(ov.industry||'N/A'));
+  if(ov.market_cap) L.push('Market Cap: $'+Math.round(ov.market_cap/1e9)+'B');
+  if(q&&q.c) L.push('Prix actuel: $'+q.c+' | Var jour: '+(q.dp?q.dp.toFixed(2):'N/A')+'%');
+  if(ps['52_week_high']) L.push('52S High: $'+ps['52_week_high']+' | 52S Low: $'+ps['52_week_low']);
+  if(vs.pe_ratio) L.push('P/E: '+parseFloat(vs.pe_ratio).toFixed(1));
+  if(vs.pb_ratio) L.push('P/B: '+parseFloat(vs.pb_ratio).toFixed(2));
+  if(vs.ev_to_ebitda) L.push('EV/EBITDA: '+parseFloat(vs.ev_to_ebitda).toFixed(1));
+  if(vs.eps_diluted_ttm) L.push('EPS TTM: $'+parseFloat(vs.eps_diluted_ttm).toFixed(2));
+  if(fin.revenue_growth_yoy) L.push('Croissance CA YoY: '+(parseFloat(fin.revenue_growth_yoy)*100).toFixed(1)+'%');
+  if(fin.net_profit_margin) L.push('Marge nette: '+(parseFloat(fin.net_profit_margin)*100).toFixed(1)+'%');
+  if(fin.return_on_equity) L.push('ROE: '+(parseFloat(fin.return_on_equity)*100).toFixed(1)+'%');
+  if(fin.debt_to_equity) L.push('Dette/Equity: '+parseFloat(fin.debt_to_equity).toFixed(2));
+  if(vs.dividend_yield) L.push('Dividende: '+(parseFloat(vs.dividend_yield)*100).toFixed(2)+'%');
+  if(vs.beta) L.push('Beta: '+parseFloat(vs.beta).toFixed(2));
+  if(ov.description) L.push('Description: '+ov.description.substring(0,200));
   L.push('=== FIN DONNEES ===');
   return L.join('\n');
 }

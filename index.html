@@ -586,8 +586,10 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 </div>
 
 <script>
-var VERSION='202603281311'; var AK = 'd73v5tpr01qno4pvr5c0d73v5tpr01qno4pvr5cg';
+var VERSION='202603281312'; var AK = 'd73v5tpr01qno4pvr5c0d73v5tpr01qno4pvr5cg';
 var FH = 'https://finnhub.io/api/v1';
+var YF_PROXY = 'https://query1.finance.yahoo.com/v8/finance/chart/';
+var YF_PROXY2 = 'https://query2.finance.yahoo.com/v8/finance/chart/';
 var DN = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
 var MN = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
 var curView = 0;
@@ -605,14 +607,49 @@ var CAL = [];
 var FAVS = new Set();
 var favF = 'ALL';
 
-// RATE LIMIT HELPER
+// YAHOO FINANCE HELPERS
 var lastFHcall = 0;
 async function fhFetch(url){
   var now = Date.now();
-  var wait = Math.max(0, 250 - (now - lastFHcall)); // max 4 calls/sec
+  var wait = Math.max(0, 300 - (now - lastFHcall));
   if(wait > 0) await new Promise(function(r){setTimeout(r,wait);});
   lastFHcall = Date.now();
   return fetch(url);
+}
+
+// Map our symbols to Yahoo Finance symbols
+function toYFSym(sym){
+  var map = {
+    'OANDA:SPX500_USD':'^GSPC','OANDA:EUR_USD':'EURUSD=X','OANDA:GBP_USD':'GBPUSD=X',
+    'OANDA:USD_JPY':'JPY=X','OANDA:XAU_USD':'GC=F','OANDA:XBR_USD':'BZ=F',
+    'OANDA:FR40_EUR':'^FCHI','OANDA:DE30_EUR':'^GDAXI','OANDA:WTICO_USD':'CL=F',
+    'BINANCE:BTCUSDT':'BTC-USD','BINANCE:ETHUSDT':'ETH-USD',
+  };
+  return map[sym] || sym;
+}
+
+async function yfQuote(sym){
+  var yfSym = toYFSym(sym);
+  try{
+    var r = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(yfSym)+'?interval=1d&range=1d', {headers:{'Accept':'application/json'}});
+    var d = await r.json();
+    var meta = d.chart && d.chart.result && d.chart.result[0] && d.chart.result[0].meta;
+    if(meta) return {c:meta.regularMarketPrice||0, pc:meta.previousClose||meta.chartPreviousClose||0, h:meta.regularMarketDayHigh||0, l:meta.regularMarketDayLow||0, o:meta.regularMarketOpen||0, v:meta.regularMarketVolume||0};
+  }catch(e){}
+  return null;
+}
+
+async function yfCandles(sym){
+  var yfSym = toYFSym(sym);
+  try{
+    var r = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(yfSym)+'?interval=1d&range=3mo', {headers:{'Accept':'application/json'}});
+    var d = await r.json();
+    var res = d.chart && d.chart.result && d.chart.result[0];
+    if(res && res.indicators && res.indicators.quote && res.indicators.quote[0]){
+      return res.indicators.quote[0].close.filter(function(v){return v!=null;});
+    }
+  }catch(e){}
+  return [];
 }
 
 // CLOCK
@@ -689,11 +726,10 @@ function buildOP(price,act,conf){
 
 async function fetchA(item){
   try{
-    var r=await fhFetch(FH+'/quote?symbol='+item.sym+'&token='+AK);
-    var q=await r.json();
-    var price=q.c||0,pct=q.pc?((q.c-q.pc)/q.pc*100):0;
-    var closes=[];
-    try{var cr=await fhFetch(FH+'/stock/candle?symbol='+item.sym+'&resolution=D&count=60&token='+AK);var cd=await cr.json();if(cd&&cd.c&&cd.c.length>10)closes=cd.c;}catch(e){}
+    var q = await yfQuote(item.sym);
+    if(!q) throw new Error('no quote');
+    var price=q.c||0, pct=q.pc?((q.c-q.pc)/q.pc*100):0;
+    var closes = await yfCandles(item.sym);
     if(!closes.length){for(var i=0;i<61;i++)closes.push(price*(1+(Math.random()-.48)*.015));}
     var ma20=ema(closes,20),ma50=ema(closes,50);
     var tr=price>ma20&&ma20>ma50?'bull':price<ma20&&ma20<ma50?'bear':'mixed';
@@ -1016,64 +1052,48 @@ var AGENTS = [
 var fundCache = {};
 
 async function fetchFinnhubData(ticker){
-  var result = {quote:null,profile:null,metrics:null,reco:null,news:[]};
+  var result = {quote:null,summary:null};
   var st = document.getElementById('fp-status');
   try{
-    if(st) st.textContent = 'Finnhub: cours temps reel…';
-    var r1 = await fhFetch(FH+'/quote?symbol='+ticker+'&token='+AK);
-    result.quote = await r1.json();
+    if(st) st.textContent = 'Yahoo Finance: cours en temps reel…';
+    var q = await yfQuote(ticker);
+    result.quote = q;
   }catch(e){}
   try{
-    if(st) st.textContent = 'Finnhub: profil entreprise…';
-    var r2 = await fhFetch(FH+'/stock/profile2?symbol='+ticker+'&token='+AK);
-    result.profile = await r2.json();
-  }catch(e){}
-  try{
-    if(st) st.textContent = 'Finnhub: metriques fondamentales…';
-    var r3 = await fhFetch(FH+'/stock/metric?symbol='+ticker+'&metric=all&token='+AK);
-    result.metrics = await r3.json();
-  }catch(e){}
-  try{
-    if(st) st.textContent = 'Finnhub: recommandations analystes…';
-    var r4 = await fhFetch(FH+'/stock/recommendation?symbol='+ticker+'&token='+AK);
-    result.reco = await r4.json();
-  }catch(e){}
-  try{
-    if(st) st.textContent = 'Finnhub: dernieres news…';
-    var r5 = await fhFetch(FH+'/company-news?symbol='+ticker+'&from=2025-01-01&to=2026-03-28&token='+AK);
-    var news = await r5.json();
-    result.news = (news||[]).slice(0,5).map(function(n){return n.headline;});
+    if(st) st.textContent = 'Yahoo Finance: donnees detaillees…';
+    var r2 = await fetch('https://query1.finance.yahoo.com/v10/finance/quoteSummary/'+encodeURIComponent(ticker)+'?modules=summaryDetail,financialData,defaultKeyStatistics,assetProfile', {headers:{'Accept':'application/json'}});
+    var d2 = await r2.json();
+    result.summary = d2.quoteSummary && d2.quoteSummary.result && d2.quoteSummary.result[0];
   }catch(e){}
   return result;
 }
 
 function buildDataCtx(ticker, fd){
-  var q=fd.quote||{}, p=fd.profile||{}, m=(fd.metrics||{}).metric||{}, r=fd.reco||[];
+  var q=fd.quote||{}, s=fd.summary||{};
+  var fin=s.financialData||{}, det=s.summaryDetail||{}, ks=s.defaultKeyStatistics||{}, prof=s.assetProfile||{};
   var L=[];
-  L.push('=== DONNEES TEMPS REEL FINNHUB ===');
+  L.push('=== DONNEES YAHOO FINANCE TEMPS REEL ===');
   L.push('Ticker: '+ticker);
-  if(p.name) L.push('Societe: '+p.name+' | Secteur: '+(p.finnhubIndustry||'N/A')+' | Pays: '+(p.country||'N/A'));
-  if(p.marketCapitalization) L.push('Market Cap: $'+Math.round(p.marketCapitalization)+'M');
-  if(q.c) L.push('Prix: $'+q.c+' | Var jour: '+(q.dp?q.dp.toFixed(2)+'%':'N/A')+' | Vol: '+(q.v||'N/A'));
-  if(m['52WeekHigh']) L.push('52S High: $'+m['52WeekHigh']+' | 52S Low: $'+m['52WeekLow']);
-  if(m.peBasicExclExtraTTM) L.push('P/E TTM: '+m.peBasicExclExtraTTM.toFixed(1));
-  if(m.pbAnnual) L.push('P/B: '+m.pbAnnual.toFixed(2));
-  if(m.pfcfShareAnnual) L.push('P/FCF: '+m.pfcfShareAnnual.toFixed(1));
-  if(m.evEbitdaAnnual) L.push('EV/EBITDA: '+m.evEbitdaAnnual.toFixed(1));
-  if(m.epsBasicExclExtraAnnual) L.push('EPS annuel: $'+m.epsBasicExclExtraAnnual.toFixed(2));
-  if(m.revenueGrowthTTMYoy) L.push('Croissance CA YoY: '+(m.revenueGrowthTTMYoy*100).toFixed(1)+'%');
-  if(m.epsGrowthTTMYoy) L.push('Croissance EPS YoY: '+(m.epsGrowthTTMYoy*100).toFixed(1)+'%');
-  if(m.netMarginTTM) L.push('Marge nette: '+(m.netMarginTTM*100).toFixed(1)+'%');
-  if(m.grossMarginTTM) L.push('Marge brute: '+(m.grossMarginTTM*100).toFixed(1)+'%');
-  if(m.roeTTM) L.push('ROE: '+(m.roeTTM*100).toFixed(1)+'%');
-  if(m.roiTTM) L.push('ROIC: '+(m.roiTTM*100).toFixed(1)+'%');
-  if(m.totalDebt_totalEquityAnnual) L.push('Dette/Equity: '+m.totalDebt_totalEquityAnnual.toFixed(2));
-  if(m.currentRatioAnnual) L.push('Current Ratio: '+m.currentRatioAnnual.toFixed(2));
-  if(m.dividendYieldIndicatedAnnual) L.push('Dividende: '+m.dividendYieldIndicatedAnnual.toFixed(2)+'%');
-  if(m.beta) L.push('Beta: '+m.beta.toFixed(2));
-  if(m.piotroskiFScore) L.push('Piotroski F-Score: '+m.piotroskiFScore);
-  if(r && r.length>0){var rc=r[0];L.push('Wall Street: StrongBuy='+rc.strongBuy+' Buy='+rc.buy+' Hold='+rc.hold+' Sell='+rc.sell+' StrongSell='+rc.strongSell+' (periode: '+rc.period+')');}
-  if(fd.news&&fd.news.length>0) L.push('News recentes: '+fd.news.join(' || '));
+  if(prof.longName||prof.shortName) L.push('Societe: '+(prof.longName||prof.shortName)+' | Secteur: '+(prof.sector||'N/A')+' | Industrie: '+(prof.industry||'N/A'));
+  if(det.marketCap&&det.marketCap.raw) L.push('Market Cap: $'+Math.round(det.marketCap.raw/1e9)+'B');
+  if(q.c) L.push('Prix actuel: $'+q.c+' | Var jour: '+((q.c-q.pc)/q.pc*100).toFixed(2)+'%');
+  if(det.fiftyTwoWeekHigh&&det.fiftyTwoWeekHigh.raw) L.push('52S High: $'+det.fiftyTwoWeekHigh.raw+' | 52S Low: $'+(det.fiftyTwoWeekLow&&det.fiftyTwoWeekLow.raw||'N/A'));
+  if(det.trailingPE&&det.trailingPE.raw) L.push('P/E TTM: '+det.trailingPE.raw.toFixed(1));
+  if(det.priceToBook&&det.priceToBook.raw) L.push('P/B: '+det.priceToBook.raw.toFixed(2));
+  if(ks.enterpriseToEbitda&&ks.enterpriseToEbitda.raw) L.push('EV/EBITDA: '+ks.enterpriseToEbitda.raw.toFixed(1));
+  if(ks.trailingEps&&ks.trailingEps.raw) L.push('EPS TTM: $'+ks.trailingEps.raw.toFixed(2));
+  if(fin.revenueGrowth&&fin.revenueGrowth.raw) L.push('Croissance CA: '+(fin.revenueGrowth.raw*100).toFixed(1)+'%');
+  if(fin.earningsGrowth&&fin.earningsGrowth.raw) L.push('Croissance Benefices: '+(fin.earningsGrowth.raw*100).toFixed(1)+'%');
+  if(fin.profitMargins&&fin.profitMargins.raw) L.push('Marge nette: '+(fin.profitMargins.raw*100).toFixed(1)+'%');
+  if(fin.grossMargins&&fin.grossMargins.raw) L.push('Marge brute: '+(fin.grossMargins.raw*100).toFixed(1)+'%');
+  if(fin.returnOnEquity&&fin.returnOnEquity.raw) L.push('ROE: '+(fin.returnOnEquity.raw*100).toFixed(1)+'%');
+  if(fin.debtToEquity&&fin.debtToEquity.raw) L.push('Dette/Equity: '+fin.debtToEquity.raw.toFixed(2));
+  if(fin.currentRatio&&fin.currentRatio.raw) L.push('Current Ratio: '+fin.currentRatio.raw.toFixed(2));
+  if(fin.freeCashflow&&fin.freeCashflow.raw) L.push('Free Cash Flow: $'+Math.round(fin.freeCashflow.raw/1e9)+'B');
+  if(det.dividendYield&&det.dividendYield.raw) L.push('Dividende: '+(det.dividendYield.raw*100).toFixed(2)+'%');
+  if(ks.beta&&ks.beta.raw) L.push('Beta: '+ks.beta.raw.toFixed(2));
+  if(fin.recommendationKey) L.push('Recommandation analysts: '+fin.recommendationKey.toUpperCase()+' ('+( fin.numberOfAnalystOpinions&&fin.numberOfAnalystOpinions.raw||0)+' analystes)');
+  if(fin.targetMeanPrice&&fin.targetMeanPrice.raw) L.push('Prix cible moyen: $'+fin.targetMeanPrice.raw.toFixed(2));
   L.push('=== FIN DONNEES ===');
   return L.join('\n');
 }

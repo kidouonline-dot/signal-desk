@@ -570,8 +570,7 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 var VERSION='202603281400';
 var AV_KEY = '4V88IGO8RAI5OASJ';
 var AV = 'https://www.alphavantage.co/query';
-var AK = 'd73v5tpr01qno4pvr5c0d73v5tpr01qno4pvr5cg';
-var FH = 'https://finnhub.io/api/v1';
+
 var DN = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
 var MN = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
 var curView = 0;
@@ -681,8 +680,7 @@ async function avCandles(sym){
   return [];
 }
 
-// Keep fhFetch as simple fetch for legacy calendar calls
-async function fhFetch(url){ return fetch(url); }
+
 function toYFSym(sym){ return toAVSym(sym); }
 async function yfQuote(sym){ return avQuote(sym); }
 async function yfCandles(sym){ return avCandles(sym); }
@@ -861,26 +859,7 @@ async function doAnalyze(){
 // CALENDAR
 function fmtD(d){return d.toISOString().split('T')[0];}
 async function loadCal(){
-  var now=new Date(),mon=new Date(now);
-  mon.setDate(now.getDate()-now.getDay()+1);mon.setHours(0,0,0,0);
-  var fri=new Date(mon);fri.setDate(mon.getDate()+20); // 3 semaines
-  try{
-    var r=await fhFetch(FH+'/calendar/economic?from='+fmtD(mon)+'&to='+fmtD(fri)+'&token='+AK);
-    var data=await r.json();
-    var cm={'united states':{c:'US',f:'🇺🇸'},'euro zone':{c:'EU',f:'🇪🇺'},'germany':{c:'DE',f:'🇩🇪'},'united kingdom':{c:'GB',f:'🇬🇧'},'japan':{c:'JP',f:'🇯🇵'},'china':{c:'CN',f:'🇨🇳'},'france':{c:'FR',f:'🇫🇷'},'canada':{c:'CA',f:'🇨🇦'}};
-    CAL=(data.economicCalendar||[]).map(function(ev){
-      var ci=cm[(ev.country||'').toLowerCase()]||{c:'??',f:'🌐'};
-      var imp=parseInt(ev.impact)||0,lvl=imp>=3?'HIGH':imp===2?'MED':'LOW';
-      var dt=new Date(ev.time||ev.date);
-      var actual=ev.actual!=null&&ev.actual!==''?String(ev.actual):null;
-      var fc=ev.estimate!=null?String(ev.estimate):'—';
-      var beat=null;if(actual&&fc&&fc!=='—'){var a=parseFloat(actual),ff=parseFloat(fc);if(!isNaN(a)&&!isNaN(ff))beat=a>ff;}
-      var id=(ev.event+fmtD(dt)+dt.getHours()).replace(/[^a-z0-9]/gi,'').substring(0,20);
-      return{id:id,dt:dt,ts:dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',hour12:false}),ds:fmtD(dt),name:ev.event||'—',country:ci.c,flag:ci.f,impact:lvl,actual:actual,fc:fc,prev:ev.prev!=null?String(ev.prev):'—',beat:beat,released:actual!==null};
-    }).sort(function(a,b){return a.dt-b.dt;});
-    renderCal();
-    var cl=document.getElementById('cal-lbl');if(cl)cl.textContent='Maj '+new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
-  }catch(e){loadCalFB();}
+  loadCalFB();
 }
 
 function renderCal(){
@@ -1046,7 +1025,6 @@ async function fetchTK(){
   for(var i=0;i<TKS.length;i++){
     var t=TKS[i];
     try{
-      var r=await fhFetch(FH+'/quote?symbol='+t.sym+'&token='+AK);
       var d=await r.json();
       if(!d||!d.c)continue;
       var pct=d.pc?((d.c-d.pc)/d.pc*100):0,up=pct>=0;

@@ -567,8 +567,10 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 </div>
 
 <script>
-var VERSION='202603281400';
+var VERSION='202603281500';
 var AV_KEY = '4V88IGO8RAI5OASJ';
+var GM_KEY = 'AIzaSyCPr96oEk2OHmbFWGE82oFK__OXq0gm_H4';
+var GM_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 var AV = 'https://www.alphavantage.co/query';
 
 var DN = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
@@ -986,9 +988,10 @@ async function doNews(){
   feed.scrollTop=feed.scrollHeight;
   ta.value='';
   try{
-    var resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:'Tu es un analyste de marché expert. Analyse l\'impact de la news sur les marchés financiers. Réponds UNIQUEMENT en JSON brut sans markdown:\n{"summary":"2-3 phrases","verdict":"bullish|bearish|mixed|neutral","assets":[{"asset":"EUR/USD","direction":"bull|bear|neutral","strength":1,"reason":"1 phrase courte"}]}\nAssets obligatoires: EUR/USD, GBP/USD, USD/JPY, S&P 500, DAX, Gold, BTC, Oil WTI.\nstrength: 1=faible 2=modéré 3=significatif 4=fort 5=très fort.',messages:[{role:'user',content:'News: '+text}]})});
+    var gmP='Tu es analyste marché. Analyse impact de cette news. JSON brut uniquement: {"summary":"2-3 phrases","verdict":"bullish|bearish|mixed|neutral","assets":[{"asset":"EUR/USD","direction":"bull|bear|neutral","strength":1,"reason":"1 phrase"}]} Assets: EUR/USD,GBP/USD,USD/JPY,S&P 500,DAX,Gold,BTC,Oil WTI. strength 1-5. News: '+text;
+    var resp=await fetch(GM_URL+'?key='+GM_KEY,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:gmP}]}],generationConfig:{temperature:0.3,maxOutputTokens:1000}})});
     var data=await resp.json();
-    var raw=(data.content&&data.content[0]&&data.content[0].text)||'{}';
+    var raw=(data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts&&data.candidates[0].content.parts[0]&&data.candidates[0].content.parts[0].text)||'{}';
     var idx=raw.indexOf('{'); var idx2=raw.lastIndexOf('}'); var parsed=JSON.parse(idx>=0&&idx2>=0?raw.slice(idx,idx2+1):'{}');
     typing.remove();
     var bubble=buildAI(parsed,now);
@@ -1156,22 +1159,15 @@ async function doFundamentals(){
   }, 900);
 
   try{
-    var resp = await fetch('https://api.anthropic.com/v1/messages',{
+    var gmFP = sysP+'\n\n'+dataCtx+'\n\nDonne le JSON complet pour ce titre avec les 18 analystes.';
+    var resp = await fetch(GM_URL+'?key='+GM_KEY,{
       method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:4000,
-        system: sysP,
-        messages:[{role:'user',content:dataCtx+'\n\nDonne le JSON complet pour ce titre avec les 18 analystes. Utilise les donnees ci-dessus pour des insights precis.'}]
-      })
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{parts:[{text:gmFP}]}],generationConfig:{temperature:0.2,maxOutputTokens:4000}})
     });
     clearInterval(animI); clearInterval(doneI);
     var data = await resp.json();
-    console.log('API status:', resp.status);
-    console.log('API response:', JSON.stringify(data).substring(0,500));
-    var raw = (data.content&&data.content[0]&&data.content[0].text)||'{}';
-    console.log('Raw text:', raw.substring(0,300));
+    var raw = (data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts&&data.candidates[0].content.parts[0]&&data.candidates[0].content.parts[0].text)||'{}';
     // Robust JSON extraction
     var parsed = {};
     try {

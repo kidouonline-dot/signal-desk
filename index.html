@@ -56,13 +56,6 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 @keyframes lv{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(16,185,129,.5);}50%{opacity:.6;box-shadow:0 0 0 5px rgba(16,185,129,0);}}
 .live-txt{font-size:8px;font-weight:700;color:var(--grn);letter-spacing:.12em;}
 
-/* TICKER */
-.ticker{height:30px;background:var(--bg2);border-bottom:1px solid var(--b1);display:flex;align-items:center;overflow-x:auto;scrollbar-width:none;flex-shrink:0;}
-.ticker::-webkit-scrollbar{display:none;}
-.tk{display:flex;align-items:center;gap:5px;padding:0 12px;border-right:1px solid var(--b1);height:100%;white-space:nowrap;flex-shrink:0;}
-.tk-s{font-size:9px;color:var(--muted);}
-.tk-v{font-size:11px;color:#fff;font-weight:500;}
-.tk-c{font-size:9px;}
 .up{color:var(--grn);}
 .dn{color:var(--red);}
 
@@ -441,19 +434,7 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
     </div>
   </div>
 
-  <!-- TICKER -->
-  <div class="ticker">
-    <div class="tk"><span class="tk-s">EUR/USD</span><span class="tk-v" id="t0">—</span><span class="tk-c" id="tc0"></span></div>
-    <div class="tk"><span class="tk-s">GBP/USD</span><span class="tk-v" id="t1">—</span><span class="tk-c" id="tc1"></span></div>
-    <div class="tk"><span class="tk-s">USD/JPY</span><span class="tk-v" id="t2">—</span><span class="tk-c" id="tc2"></span></div>
-    <div class="tk"><span class="tk-s">SPY</span><span class="tk-v" id="t3">—</span><span class="tk-c" id="tc3"></span></div>
-    <div class="tk"><span class="tk-s">QQQ</span><span class="tk-v" id="t4">—</span><span class="tk-c" id="tc4"></span></div>
-    <div class="tk"><span class="tk-s">GOLD</span><span class="tk-v" id="t5">—</span><span class="tk-c" id="tc5"></span></div>
-    <div class="tk"><span class="tk-s">BTC</span><span class="tk-v" id="t6">—</span><span class="tk-c" id="tc6"></span></div>
-    <div class="tk"><span class="tk-s">ETH</span><span class="tk-v" id="t7">—</span><span class="tk-c" id="tc7"></span></div>
-    <div class="tk"><span class="tk-s">CAC40</span><span class="tk-v" id="t8">—</span><span class="tk-c" id="tc8"></span></div>
-    <div class="tk"><span class="tk-s">DAX</span><span class="tk-v" id="t9">—</span><span class="tk-c" id="tc9"></span></div>
-  </div>
+
 
   <!-- TABS -->
   <div class="tabs">
@@ -482,7 +463,7 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 
   <!-- VIEW 2: CALENDAR -->
   <div class="view hidden" id="v2">
-    <div class="sec-label">📅 Agenda économique — Semaine<span class="sec-label-r" id="cal-lbl">Finnhub</span></div>
+    <div class="sec-label">📅 Agenda économique — 3 Semaines<span class="sec-label-r" id="cal-lbl">Finnhub</span></div>
     <div class="scroll"><div id="cal-body"><div class="empty">Chargement…</div></div></div>
   </div>
 
@@ -882,7 +863,7 @@ function fmtD(d){return d.toISOString().split('T')[0];}
 async function loadCal(){
   var now=new Date(),mon=new Date(now);
   mon.setDate(now.getDate()-now.getDay()+1);mon.setHours(0,0,0,0);
-  var fri=new Date(mon);fri.setDate(mon.getDate()+6);
+  var fri=new Date(mon);fri.setDate(mon.getDate()+20); // 3 semaines
   try{
     var r=await fhFetch(FH+'/calendar/economic?from='+fmtD(mon)+'&to='+fmtD(fri)+'&token='+AK);
     var data=await r.json();
@@ -931,6 +912,7 @@ function loadCalFB(){
   var dy=function(n){var d=new Date(today);d.setDate(today.getDate()-today.getDay()+1+n);return d;};
   var mk=function(n,t,c,fl,nm,imp,act,fc,prev){var d=dy(n),id=(nm+n+t).replace(/[^a-z0-9]/gi,'').substring(0,20);return{id:id,dt:d,ts:t,ds:f(d),name:nm,country:c,flag:fl,impact:imp,actual:act,fc:fc,prev:prev,beat:act&&fc&&fc!=='—'?parseFloat(act)>parseFloat(fc):null,released:act!==null};};
   CAL=[
+    // Semaine en cours
     mk(0,'14:30','US','🇺🇸','ISM Manufacturier','HIGH','50.3','49.8','47.8'),
     mk(1,'14:30','US','🇺🇸','JOLTS Offres Emploi','HIGH',null,'8.73M','8.86M'),
     mk(1,'16:00','US','🇺🇸','ISM Services','HIGH',null,'52.8','53.5'),
@@ -941,6 +923,26 @@ function loadCalFB(){
     mk(4,'13:30','US','🇺🇸','NFP Non-Farm Payrolls','HIGH',null,'+214K','+275K'),
     mk(4,'13:30','US','🇺🇸','Taux de Chômage','HIGH',null,'3.9%','3.9%'),
     mk(4,'15:00','US','🇺🇸','Confiance Michigan','MED',null,'77.5','76.9'),
+    // Semaine +1
+    mk(7,'14:30','US','🇺🇸','IPC US (CPI)','HIGH',null,'2.6%','2.8%'),
+    mk(7,'14:30','US','🇺🇸','IPC Core US','HIGH',null,'3.0%','3.1%'),
+    mk(8,'09:00','EU','🇪🇺','PIB Zone Euro','MED',null,'0.9%','0.8%'),
+    mk(8,'14:30','US','🇺🇸','IPP US (PPI)','HIGH',null,'3.1%','3.4%'),
+    mk(9,'14:30','US','🇺🇸','Ventes au Détail','HIGH',null,'+0.4%','+0.2%'),
+    mk(9,'20:00','US','🇺🇸','Livre Beige Fed','MED',null,'—','—'),
+    mk(10,'14:30','US','🇺🇸','Inscriptions Chômage','MED',null,'215K','212K'),
+    mk(10,'14:30','US','🇺🇸','Production Industrielle','MED',null,'-0.1%','+0.2%'),
+    mk(11,'16:00','US','🇺🇸','Confiance Consommateurs','MED',null,'88.5','87.0'),
+    // Semaine +2
+    mk(14,'14:30','US','🇺🇸','Discours Powell Fed','HIGH',null,'—','—'),
+    mk(14,'09:00','DE','🇩🇪','IPC Allemagne','HIGH',null,'2.1%','2.3%'),
+    mk(15,'14:30','US','🇺🇸','Permis de Construire','MED',null,'1.48M','1.45M'),
+    mk(15,'14:30','US','🇺🇸','Mises en Chantier','MED',null,'1.42M','1.38M'),
+    mk(16,'15:30','US','🇺🇸','Stocks Petrole EIA','MED',null,'-2.1M','-1.5M'),
+    mk(17,'14:30','US','🇺🇸','Inscriptions Chômage','MED',null,'210K','213K'),
+    mk(17,'14:30','US','🇺🇸','Indice Philly Fed','MED',null,'15.1','12.0'),
+    mk(18,'15:00','US','🇺🇸','Ventes Logements Existants','MED',null,'4.12M','4.05M'),
+    mk(18,'15:00','EU','🇪🇺','Balance Commerciale EU','LOW',null,'18.5B','16.2B'),
   ];
   renderCal();
 }
@@ -1077,8 +1079,7 @@ function hideLoad(){var l=document.getElementById('loading');l.classList.add('ou
 // INIT
 loadWL();
 loadCal();
-fetchTK();
-setInterval(fetchTK,20000);
+
 setInterval(loadCal,120000);
 
 // ── FUNDAMENTALS ──

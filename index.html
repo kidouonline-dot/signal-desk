@@ -463,6 +463,11 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-siz
       <span style="color:var(--acc2);font-weight:600;">🇺🇸 SPX <span id="spx-price" style="color:#fff;">—</span> <span id="spx-chg">—</span></span>
     </div>
     <div class="search-bar"><input class="search-inp" id="sinp" placeholder="Ticker (AAPL, BTC/USD, EUR/USD...)"><button class="search-btn" onclick="doSearch()">ANALYSER</button></div>
+    <div class="mtf-wrap" id="mtf-wrap" style="display:none;">
+      <div class="mtf-title">⏱ Multi-Timeframe <span id="mtf-sym" style="color:#fff;font-weight:800;margin-left:4px;"></span></div>
+      <div class="mtf-grid" id="mtf-grid"><div class="mtf-loading">Analyse un actif pour voir le MTF</div></div>
+      <div class="mtf-align" id="mtf-align" style="display:none;"></div>
+    </div>
     <!-- Tabs internes Signaux/Indicateurs -->
     <div style="display:flex;background:var(--surf);border-bottom:1px solid var(--b2);flex-shrink:0;">
       <button id="sig-tab" style="flex:1;padding:8px;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border:none;background:none;font-family:var(--mono);color:var(--acc2);border-bottom:2px solid var(--acc2);cursor:pointer;" onclick="showSigPane('signals')">⚡ SIGNAUX</button>
@@ -969,6 +974,8 @@ async function doSearch(){
   var el=document.getElementById('srch-tmp');if(el)el.remove();
   c.insertAdjacentHTML('afterbegin',renderCard(d,false));
   document.getElementById('ind-cont').innerHTML=renderInd(d);
+  // Load MTF
+  loadMTF(raw);
   // Auto-show indicators pane after search
   showSigPane('indicators');
   inp.value='';
@@ -1181,12 +1188,13 @@ function buildAIBubble(data,time){
 }
 
 var RSS_FEEDS=[
-  {name:'Reuters',  short:'REU', tag:'macro',  url:'https://feeds.reuters.com/reuters/businessNews'},
-  {name:'BBC Biz',  short:'BBC', tag:'macro',  url:'https://feeds.bbci.co.uk/news/business/rss.xml'},
-  {name:'Yahoo Fin',short:'YFN', tag:'stocks', url:'https://finance.yahoo.com/rss/topstories'},
-  {name:'CoinDesk', short:'CD',  tag:'crypto', url:'https://www.coindesk.com/arc/outboundfeeds/rss/'},
-  {name:'CoinTele', short:'CT',  tag:'crypto', url:'https://cointelegraph.com/rss'},
-  {name:'FX Street',short:'FX',  tag:'forex',  url:'https://www.fxstreet.com/rss/news'}
+  {name:'Reuters',   short:'REU', tag:'macro',  url:'https://feeds.reuters.com/reuters/businessNews'},
+  {name:'BBC Biz',   short:'BBC', tag:'macro',  url:'https://feeds.bbci.co.uk/news/business/rss.xml'},
+  {name:'Yahoo Fin', short:'YFN', tag:'stocks', url:'https://finance.yahoo.com/rss/topstories'},
+  {name:'Guru Focus',short:'GF',  tag:'stocks', url:'https://www.gurufocus.com/news/index.php?action=rss'},
+  {name:'CoinDesk',  short:'CD',  tag:'crypto', url:'https://www.coindesk.com/arc/outboundfeeds/rss/'},
+  {name:'CoinTele',  short:'CT',  tag:'crypto', url:'https://cointelegraph.com/rss'},
+  {name:'FX Street', short:'FX',  tag:'forex',  url:'https://www.fxstreet.com/rss/news'}
 ];
 var RSS_PROXY='https://api.rss2json.com/v1/api.json?rss_url=';
 async function loadRSS(){
@@ -1610,6 +1618,100 @@ function renderBriefing(d, healthScore, fgScore){
     +(fxPairs ? '<div class="brief-section"><div class="brief-sec-hdr"><span class="brief-sec-title">💱 Forex · Bias du Jour</span><span class="brief-sec-badge">'+(d.forex&&d.forex.bias||'Analyse')+'</span></div>'+fxPairs+'</div>' : '')
     +tradeHTML
     +'<div style="padding:10px 14px;font-size:8px;color:var(--muted);text-align:center;">'+(d.disclaimer||'Analyse IA a titre informatif uniquement.')+'</div>';
+}
+
+// ── MULTI-TIMEFRAME ANALYSIS ──
+var MTF_TFS = [
+  {tf:'1W',  interval:'1week',  label:'1W',  outputsize:60},
+  {tf:'1D',  interval:'1day',   label:'1J',  outputsize:60},
+  {tf:'4H',  interval:'4h',     label:'4H',  outputsize:60},
+  {tf:'1H',  interval:'1h',     label:'1H',  outputsize:60},
+];
+
+async function getCandlesTF(sym, interval, outputsize){
+  var ck = 'mtf_'+sym+'_'+interval;
+  if(tdCache[ck] && Date.now()-tdCache[ck].ts < 300000) return tdCache[ck].v;
+  try{
+    var d = await tdFetch('/time_series','symbol='+encodeURIComponent(sym)+'&interval='+interval+'&outputsize='+outputsize);
+    if(d && d.values && d.values.length>0){
+      var cl = d.values.map(function(v){return parseFloat(v.close);}).reverse();
+      tdCache[ck] = {v:cl, ts:Date.now()};
+      return cl;
+    }
+  }catch(e){}
+  return [];
+}
+
+async function loadMTF(sym){
+  var wrap = document.getElementById('mtf-wrap');
+  var grid = document.getElementById('mtf-grid');
+  var align = document.getElementById('mtf-align');
+  var symEl = document.getElementById('mtf-sym');
+  if(!wrap||!grid) return;
+
+  wrap.style.display = '';
+  if(symEl) symEl.textContent = sym;
+  grid.innerHTML = '<div class="mtf-loading">⟳ Analyse multi-timeframe...</div>';
+  if(align) align.style.display = 'none';
+
+  var results = [];
+  for(var i=0; i<MTF_TFS.length; i++){
+    var tf = MTF_TFS[i];
+    try{
+      var closes = await getCandlesTF(sym, tf.interval, tf.outputsize);
+      if(closes.length >= 20){
+        var ma20 = ema(closes,20), ma50 = ema(closes, Math.min(50,closes.length-1));
+        var trend = closes[closes.length-1]>ma20&&ma20>ma50?'bull':closes[closes.length-1]<ma20&&ma20<ma50?'bear':'mixed';
+        var ind = {rsi:calcRSI(closes),macd:calcMACD(closes),bb:calcBB(closes),stoch:calcStoch(closes),adx:calcADX(closes),trend:trend,ma20:ma20,ma50:ma50};
+        var sig = buildSig(ind, closes);
+        results.push({tf:tf, sig:sig, ok:true});
+      } else {
+        results.push({tf:tf, sig:{act:'NEUTRAL',conf:0}, ok:false});
+      }
+    }catch(e){
+      results.push({tf:tf, sig:{act:'NEUTRAL',conf:0}, ok:false});
+    }
+    if(i < MTF_TFS.length-1) await new Promise(function(r){setTimeout(r,400);});
+  }
+
+  // Render cells
+  grid.innerHTML = results.map(function(r){
+    if(!r.ok) return '<div class="mtf-cell NEUTRAL"><div class="mtf-tf">'+r.tf.label+'</div><div class="mtf-sig NEUTRAL">N/A</div><div class="mtf-conf">—</div></div>';
+    var arrow = r.sig.act==='LONG'?'↑':r.sig.act==='SHORT'?'↓':'◆';
+    return '<div class="mtf-cell '+r.sig.act+'"><div class="mtf-tf">'+r.tf.label+'</div><div class="mtf-sig '+r.sig.act+'">'+arrow+' '+r.sig.act+'</div><div class="mtf-conf">'+r.sig.conf+'%</div></div>';
+  }).join('');
+
+  // Alignment analysis
+  if(align){
+    align.style.display = 'flex';
+    var longs = results.filter(function(r){return r.sig.act==='LONG';}).length;
+    var shorts = results.filter(function(r){return r.sig.act==='SHORT';}).length;
+    var valid = results.filter(function(r){return r.ok;}).length;
+
+    var alignTxt, alignCls, alignDesc;
+    if(longs===valid){
+      alignTxt='ALIGNEMENT HAUSSIER TOTAL';alignCls='full-bull';
+      alignDesc='Tous les TF haussiers — forte conviction LONG';
+    } else if(shorts===valid){
+      alignTxt='ALIGNEMENT BAISSIER TOTAL';alignCls='full-bear';
+      alignDesc='Tous les TF baissiers — forte conviction SHORT';
+    } else if(longs>=3){
+      alignTxt='MAJORITE HAUSSIERE';alignCls='full-bull';
+      alignDesc='Retournement court terme possible — attendre confirmation 4H';
+    } else if(shorts>=3){
+      alignTxt='MAJORITE BAISSIERE';alignCls='full-bear';
+      alignDesc='Retournement court terme possible — attendre confirmation 4H';
+    } else if(longs>0&&shorts>0&&Math.abs(longs-shorts)<=1){
+      alignTxt='CONFLIT TF — ATTENTION';alignCls='conflict';
+      alignDesc='Divergence entre TF longs et courts — eviter position directionnelle';
+    } else {
+      alignTxt='MIXTE';alignCls='mixed';
+      alignDesc='Pas de consensus — attendre signal plus clair';
+    }
+
+    var dots = results.map(function(r){return '<div class="mtf-dot '+r.sig.act+'"></div>';}).join('');
+    align.innerHTML = '<div><div class="mtf-align-val '+alignCls+'">'+alignTxt+'</div><div style="font-size:8px;color:var(--muted);margin-top:2px;">'+alignDesc+'</div></div><div class="mtf-dots">'+dots+'</div>';
+  }
 }
 
 function hideLoad(){var l=document.getElementById('loading');l.classList.add('out');setTimeout(function(){l.style.display='none';},500);}

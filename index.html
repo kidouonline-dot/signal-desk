@@ -1216,11 +1216,14 @@ function buildAIBubble(data,time){
 var RSS_FEEDS=[
   {name:'Reuters',   short:'REU', tag:'macro',  url:'https://feeds.reuters.com/reuters/businessNews'},
   {name:'BBC Biz',   short:'BBC', tag:'macro',  url:'https://feeds.bbci.co.uk/news/business/rss.xml'},
-  {name:'Yahoo Fin', short:'YFN', tag:'stocks', url:'https://finance.yahoo.com/rss/topstories'},
-  {name:'Guru Focus',short:'GF',  tag:'stocks', url:'https://www.gurufocus.com/news/index.php?action=rss'},
+  {name:'CNBC',      short:'CNBC',tag:'macro',  url:'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114'},
+  {name:'MarketWatch',short:'MW', tag:'stocks', url:'https://feeds.marketwatch.com/marketwatch/topstories/'},
+  {name:'Nasdaq',    short:'NDQ', tag:'stocks', url:'https://www.nasdaq.com/feed/rssoutbound?category=Markets'},
+  {name:'GuruFocus', short:'GF',  tag:'stocks', url:'https://www.gurufocus.com/news/index.php?action=rss&type=gurufocus'},
   {name:'CoinDesk',  short:'CD',  tag:'crypto', url:'https://www.coindesk.com/arc/outboundfeeds/rss/'},
   {name:'CoinTele',  short:'CT',  tag:'crypto', url:'https://cointelegraph.com/rss'},
-  {name:'FX Street', short:'FX',  tag:'forex',  url:'https://www.fxstreet.com/rss/news'}
+  {name:'FX Street', short:'FX',  tag:'forex',  url:'https://www.fxstreet.com/rss/news'},
+  {name:'Investing', short:'INV', tag:'forex',  url:'https://www.investing.com/rss/news_285.rss'},
 ];
 var RSS_PROXY='https://api.rss2json.com/v1/api.json?rss_url=';
 async function loadRSS(){
@@ -1247,7 +1250,12 @@ async function loadRSS(){
   });
   await Promise.allSettled(promises);
   if(!rssItems.length){
-    c.innerHTML='<div class="rss-loading">Aucune news chargee — verifiez la connexion</div>';
+    c.innerHTML='<div class="rss-loading" style="padding:20px;text-align:center;">'
+      +'<div style="font-size:20px;margin-bottom:8px;">📡</div>'
+      +'<div style="color:var(--txt);margin-bottom:4px;">Flux indisponibles</div>'
+      +'<div style="font-size:9px;color:var(--muted);">Certains feeds RSS bloquent les proxys.<br>Reessayez dans quelques instants.</div>'
+      +'<button onclick="rssItems=[];loadRSS();" style="margin-top:10px;padding:6px 14px;background:var(--accg);border:1px solid var(--acc);color:var(--acc2);font-family:var(--mono);font-size:9px;cursor:pointer;">↺ Recharger</button>'
+      +'</div>';
     return;
   }
   rssItems.sort(function(a,b){return a.ago-b.ago;});
@@ -1257,7 +1265,9 @@ function renderRSS(){
   var c=document.getElementById('rss-cont');if(!c)return;
   var items=rssFilter==='all'?rssItems:rssItems.filter(function(i){return i.tag===rssFilter;});
   if(!items.length){c.innerHTML='<div class="rss-loading">Aucune news pour ce filtre</div>';return;}
-  c.innerHTML=items.slice(0,50).map(function(item){
+  var sources=[...new Set(rssItems.map(function(i){return i.source;}))];
+  var header='<div style="padding:6px 12px;background:var(--surf2);border-bottom:1px solid var(--b1);font-size:8px;color:var(--muted);">'+rssItems.length+' news · '+sources.length+' sources · <span style="color:var(--grn);">✓ '+sources.join(', ')+'</span></div>';
+  c.innerHTML=header+items.slice(0,60).map(function(item){
     var hl=xss(item.title);
     var ago=item.ago<60?item.ago+'m':Math.round(item.ago/60)+'h';
     var safe=item.title.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,' ');

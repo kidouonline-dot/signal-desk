@@ -128,11 +128,23 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-siz
 .ind-ico.bull{color:var(--grn);}
 .ind-ico.bear{color:var(--red);}
 .ind-ico.warn{color:var(--yel);}
-.ind-txt{flex:1;font-size:10px;color:var(--txt);}
+.ind-txt{flex:1;font-size:10px;}
+.ind-txt.bull{color:var(--grn);}
+.ind-txt.bear{color:var(--red);}
+.ind-txt.warn{color:var(--yel);}
+.ind-txt.neutral{color:var(--muted);}
 .ind-tag{font-size:7px;font-weight:700;padding:1px 5px;border:1px solid;}
 .ind-tag.CONFIRM{border-color:rgba(107,114,128,.5);color:var(--muted);}
 .ind-tag.LEADING{border-color:rgba(168,85,247,.5);color:var(--acc2);}
 .ind-tag.WARNING{border-color:rgba(245,158,11,.4);color:var(--yel);}
+.ew-card{margin:0 0 6px;background:var(--bg2);border:1px solid var(--b2);border-left:3px solid var(--yel);padding:8px 10px;}
+.ew-card.bear{border-left-color:var(--red);}
+.ew-card.bull{border-left-color:var(--grn);}
+.ew-card-title{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px;display:flex;align-items:center;justify-content:space-between;}
+.ew-card-title.bear{color:var(--red);}
+.ew-card-title.bull{color:var(--grn);}
+.ew-card-title.warn{color:var(--yel);}
+.ew-card-desc{font-size:9px;color:var(--muted);line-height:1.5;}
 .ew-sec{border-top:1px solid var(--b1);padding:9px 13px;}
 .ew-title{font-size:8px;font-weight:700;letter-spacing:.18em;color:var(--yel);text-transform:uppercase;margin-bottom:7px;}
 .ew-item{font-size:10px;color:var(--txt);padding:4px 0;border-bottom:1px solid rgba(26,34,48,.4);}
@@ -722,33 +734,84 @@ function calcADX(p){
   for(var j=ch.length-14;j<ch.length;j++) s+=ch[j];
   return Math.min(Math.max(s/14*10,5),85);
 }
-function buildSig(ind){
+function calcICS(closes,ma20,ma50){
+  // Ichimoku-like cloud score: price vs MA20 vs MA50 alignment
+  var p=closes[closes.length-1];
+  if(p>ma20&&p>ma50&&ma20>ma50) return 85;
+  if(p>ma20&&p>ma50) return 65;
+  if(p>ma20||p>ma50) return 50;
+  if(p<ma20&&p<ma50&&ma20<ma50) return 15;
+  if(p<ma20&&p<ma50) return 30;
+  return 45;
+}
+function calcVOL(closes){
+  if(closes.length<20) return 1;
+  var recent=Math.abs(closes[closes.length-1]-closes[closes.length-2]);
+  var avg=0;
+  for(var i=closes.length-20;i<closes.length-1;i++) avg+=Math.abs(closes[i+1]-closes[i]);
+  avg=avg/19;
+  return avg>0?Math.round(recent/avg*10)/10:1;
+}
+function detectWyckoff(closes){
+  if(closes.length<25) return null;
+  var recent=closes.slice(-20);
+  var hi=Math.max.apply(null,recent),lo=Math.min.apply(null,recent);
+  var last=closes[closes.length-1],prev=closes[closes.length-2];
+  var range=hi-lo;
+  // Upthrust: price briefly broke above range high then closed back inside
+  if(prev>hi*0.99&&last<hi*0.98) return {type:'WYCKOFF UPTHRUST',cls:'bear',desc:'Prix au-dessus du range puis retrait - faux breakout baissier classique. Setup short haute probabilite.'};
+  // Spring: price briefly broke below range low then recovered
+  if(prev<lo*1.01&&last>lo*1.02) return {type:'WYCKOFF SPRING',cls:'bull',desc:'Prix sous le range puis recovery - accumulation bullish. Setup long haute probabilite.'};
+  return null;
+}
+function buildSig(ind,closes){
   var rsiV=ind.rsi,mV=ind.macd,bV=ind.bb,sV=ind.stoch,aV=ind.adx,tr=ind.trend;
+  var ics=closes?calcICS(closes,ind.ma20,ind.ma50):50;
+  var vol=closes?calcVOL(closes):1;
   var bull=0,bear=0,sigs=[];
-  if(rsiV<35){bull+=15;sigs.push({t:0,txt:'RSI '+rsiV.toFixed(0)+' survendu',tag:'CONFIRM'});}
-  else if(rsiV>65){bear+=15;sigs.push({t:1,txt:'RSI '+rsiV.toFixed(0)+' surachete',tag:'CONFIRM'});}
-  else sigs.push({t:2,txt:'RSI '+rsiV.toFixed(0)+' neutre',tag:'CONFIRM'});
-  if(mV.h>0){bull+=20;sigs.push({t:0,txt:'MACD haussier',tag:'LEADING'});}
-  else{bear+=20;sigs.push({t:1,txt:'MACD baissier',tag:'LEADING'});}
-  if(bV.pct<20){bull+=15;sigs.push({t:0,txt:'BB% '+bV.pct.toFixed(0)+'% sous bande inf.',tag:'CONFIRM'});}
-  else if(bV.pct>80){bear+=15;sigs.push({t:1,txt:'BB% '+bV.pct.toFixed(0)+'% au-dessus sup.',tag:'CONFIRM'});}
-  else sigs.push({t:2,txt:'Bollinger mid-range',tag:'CONFIRM'});
-  if(sV.k<25){bull+=10;sigs.push({t:0,txt:'Stoch '+sV.k.toFixed(0)+' survendu',tag:'CONFIRM'});}
-  else if(sV.k>75){bear+=10;sigs.push({t:1,txt:'Stoch '+sV.k.toFixed(0)+' surachete',tag:'CONFIRM'});}
-  if(tr==='bull'){bull+=25;sigs.push({t:0,txt:'MA stack haussier',tag:'CONFIRM'});}
-  else if(tr==='bear'){bear+=25;sigs.push({t:1,txt:'MA stack baissier',tag:'CONFIRM'});}
-  else sigs.push({t:2,txt:'MA stack mixte',tag:'CONFIRM'});
+  // MA Stack
+  if(tr==='bull'){bull+=25;sigs.push({t:0,txt:'Full bull stack: price > EMA20 > EMA50',tag:'CONFIRM'});}
+  else if(tr==='bear'){bear+=25;sigs.push({t:1,txt:'Full bear stack — all MAs declining',tag:'CONFIRM'});}
+  else sigs.push({t:2,txt:'MA stack mixte — pas de tendance claire',tag:'CONFIRM'});
+  // Trend score via ICS
+  if(ics>70){bull+=15;sigs.push({t:0,txt:'ICS '+ics+' — accumulation institutionnelle',tag:'LEADING'});}
+  else if(ics<35){bear+=15;sigs.push({t:1,txt:'ICS '+ics+' — distribution institutionnelle',tag:'LEADING'});}
+  else sigs.push({t:2,txt:'ICS '+ics+' — zone neutre',tag:'CONFIRM'});
+  // MACD
+  if(mV.h>0){bull+=15;sigs.push({t:0,txt:'MACD au-dessus signal line',tag:'CONFIRM'});}
+  else{bear+=15;sigs.push({t:1,txt:'MACD sous signal line',tag:'CONFIRM'});}
+  // RSI
+  if(rsiV<35){bull+=15;sigs.push({t:0,txt:'RSI '+rsiV.toFixed(0)+' — zone survendu',tag:'CONFIRM'});}
+  else if(rsiV>65){bear+=10;sigs.push({t:1,txt:'RSI '+rsiV.toFixed(0)+' — zone haussiere/surachete',tag:'CONFIRM'});}
+  else sigs.push({t:2,txt:'RSI '+rsiV.toFixed(0)+' — zone neutre',tag:'CONFIRM'});
+  // Bollinger
+  if(bV.pct<20){bull+=10;sigs.push({t:0,txt:'BB% '+bV.pct.toFixed(0)+'% — sous bande inferieure',tag:'CONFIRM'});}
+  else if(bV.pct>80){bear+=10;sigs.push({t:1,txt:'BB% '+bV.pct.toFixed(0)+'% — au-dessus superieure',tag:'CONFIRM'});}
+  // Stoch
+  if(sV.k<25){bull+=10;sigs.push({t:0,txt:'Stoch '+sV.k.toFixed(0)+' — survendu',tag:'CONFIRM'});}
+  else if(sV.k>75){bear+=10;sigs.push({t:1,txt:'Stoch '+sV.k.toFixed(0)+' — surachete',tag:'CONFIRM'});}
+  // Volume
+  if(vol<0.3) sigs.push({t:2,txt:'Volume fin ('+vol+'x avg) — faible conviction',tag:'CONFIRM'});
+  else if(vol>1.5) sigs.push({t:0,txt:'Volume fort ('+vol+'x avg) — conviction elevee',tag:'CONFIRM'});
   var tot=bull+bear||1,bp=bull/tot*100,brp=bear/tot*100;
+  // Determine signal strength
   var act,conf,desc;
-  if(bp>=60){act='LONG';conf=Math.round(40+bp*0.5);desc='Indicateurs haussiers. Biais long.';}
-  else if(brp>=60){act='SHORT';conf=Math.round(40+brp*0.5);desc='Indicateurs baissiers. Lean short.';}
+  if(bp>=70){act='LONG';conf=Math.round(50+bp*0.45);desc='High conviction bullish. Scale in with full R.';}
+  else if(bp>=55){act='LONG';conf=Math.round(40+bp*0.4);desc='Indicateurs haussiers. Biais long.';}
+  else if(brp>=70){act='SHORT';conf=Math.round(50+brp*0.45);desc='High conviction bearish. Short on bounces. Trail stop tight.';}
+  else if(brp>=55){act='SHORT';conf=Math.round(40+brp*0.4);desc='Indicateurs baissiers. Lean short.';}
   else{act='NEUTRAL';conf=Math.round(35+Math.abs(bp-50)*0.5);desc='Signaux mixtes. Attendre confirmation.';}
+  conf=Math.min(conf,95);
+  // Early warnings
   var warns=[];
-  if(rsiV>70&&mV.h<0) warns.push('Divergence RSI/MACD - possible retournement');
-  if(aV<20) warns.push('ADX faible - tendance peu etablie');
-  if(bV.pct>90) warns.push('Prix extreme bande Bollinger superieure');
-  if(bV.pct<10) warns.push('Prix extreme bande Bollinger inferieure');
-  return {act:act,conf:conf,desc:desc,score:Math.round(bp),sigs:sigs,warns:warns,adx:Math.round(aV)};
+  var wyckoff=closes?detectWyckoff(closes):null;
+  if(wyckoff) warns.push({txt:wyckoff.type,cls:wyckoff.cls,desc:wyckoff.desc,tag:'LEADING'});
+  if(rsiV>70&&mV.h<0) warns.push({txt:'Divergence RSI/MACD — retournement possible',cls:'warn',desc:'RSI surachete mais MACD baissier. Signal de faiblesse.',tag:'LEADING'});
+  if(aV<20) warns.push({txt:'ADX '+Math.round(aV)+' — tendance faible',cls:'warn',desc:'Trend score weak: '+Math.round(aV)+'/100. Eviter les breakouts.',tag:'CONFIRM'});
+  if(vol<0.3) warns.push({txt:'Volume thin ('+vol+'x avg) — low conviction',cls:'warn',desc:'Volume anormalement bas. Signal peu fiable.',tag:'CONFIRM'});
+  if(bV.pct>92) warns.push({txt:'Prix extreme Bollinger superieure',cls:'bear',desc:'Extension extreme. Risque de retour vers la moyenne.',tag:'LEADING'});
+  if(bV.pct<8) warns.push({txt:'Prix extreme Bollinger inferieure',cls:'bull',desc:'Extension extreme vers le bas. Potentiel rebond.',tag:'LEADING'});
+  return {act:act,conf:conf,desc:desc,score:Math.round(bp),sigs:sigs,warns:warns,adx:Math.round(aV),ics:ics,vol:vol};
 }
 function buildOP(price,act,conf){
   var dp=price>1000?0:price>100?2:4;
@@ -768,7 +831,7 @@ async function fetchAsset(item){
     var ma20=ema(closes,20),ma50=ema(closes,50);
     var trend=price>ma20&&ma20>ma50?'bull':price<ma20&&ma20<ma50?'bear':'mixed';
     var ind={rsi:calcRSI(closes),macd:calcMACD(closes),bb:calcBB(closes),stoch:calcStoch(closes),adx:calcADX(closes),trend:trend,ma20:ma20,ma50:ma50};
-    var sig=buildSig(ind),op=buildOP(price,sig.act,sig.conf);
+    var sig=buildSig(ind,closes),op=buildOP(price,sig.act,sig.conf);
     var dp2=price>1000?0:price>100?2:4;
     var f=function(v){return v.toFixed(dp2);};
     return {sym:item.sym,disp:item.disp,name:q.name||item.name||item.disp,price:f(price),priceFmt:f(price),pct:pct.toFixed(2),pctN:pct,entry:f(price),stop:f(sig.act==='LONG'?price*0.96:price*1.04),tgt:f(sig.act==='LONG'?price*1.084:price*0.916),stopP:'4.0',tgtP:'8.4',ind:ind,sig:sig,op:op};
@@ -781,7 +844,7 @@ function simAsset(item){
   var ma20=ema(closes,20),ma50=ema(closes,50);
   var trend=p>ma20&&ma20>ma50?'bull':p<ma20&&ma20<ma50?'bear':'mixed';
   var ind={rsi:calcRSI(closes),macd:calcMACD(closes),bb:calcBB(closes),stoch:calcStoch(closes),adx:calcADX(closes),trend:trend,ma20:ma20,ma50:ma50};
-  var sig=buildSig(ind),op=buildOP(p,sig.act,sig.conf);
+  var sig=buildSig(ind,closes),op=buildOP(p,sig.act,sig.conf);
   var dp2=p>1000?0:p>100?2:4,f=function(v){return v.toFixed(dp2);};
   return {sym:item.sym,disp:item.disp,name:item.name||item.disp,price:f(p),priceFmt:f(p),pct:(Math.random()*4-2).toFixed(2),pctN:Math.random()*4-2,entry:f(p),stop:f(p*0.96),tgt:f(p*1.084),stopP:'4.0',tgtP:'8.4',ind:ind,sig:sig,op:op};
 }
@@ -792,12 +855,15 @@ function renderCard(d,coll){
   var s=d.sig,op=d.op,up=d.pctN>=0;
   var id='c'+d.sym.replace(/[^a-zA-Z0-9]/g,'');
   var iH=s.sigs.map(function(si){
-    var ico=si.t===0?'checkmark':si.t===1?'x':'triangle';
     var cls=si.t===0?'bull':si.t===1?'bear':'warn';
     var ic=si.t===0?'✓':si.t===1?'✗':'△';
-    return '<div class="ind-row"><span class="ind-ico '+cls+'">'+ic+'</span><span class="ind-txt">'+si.txt+'</span><span class="ind-tag '+si.tag+'">'+si.tag+'</span></div>';
+    return '<div class="ind-row"><span class="ind-ico '+cls+'">'+ic+'</span><span class="ind-txt '+cls+'">'+si.txt+'</span><span class="ind-tag '+si.tag+'">'+si.tag+'</span></div>';
   }).join('');
-  var eH=s.warns.length?s.warns.map(function(w){return '<div class="ew-item">'+w+'</div>';}).join(''):'<div class="ew-item" style="color:var(--muted)">Aucun signal alerte</div>';
+  var eH=s.warns.length?s.warns.map(function(w){
+    var obj=typeof w==='object'?w:{txt:w,cls:'warn',desc:'',tag:'CONFIRM'};
+    var ic=obj.cls==='bull'?'▲':obj.cls==='bear'?'▼':'⚠';
+    return '<div class="ew-card '+obj.cls+'"><div class="ew-card-title '+obj.cls+'"><span>'+ic+' '+obj.txt.toUpperCase()+'</span><span class="ind-tag '+obj.tag+'">'+obj.tag+'</span></div>'+(obj.desc?'<div class="ew-card-desc">'+obj.desc+'</div>':'')+'</div>';
+  }).join(''):'<div class="ew-item" style="color:var(--muted);font-size:9px;">Aucun signal alerte detecte</div>';
   var oH='<div class="op-card"><div class="op-ch"><span class="op-strat '+op.cls+'">'+op.s+'</span><span style="font-size:8px;color:var(--cyn);border:1px solid rgba(6,182,212,.4);padding:1px 6px;">'+op.dte+'</span></div><div class="op-legs"><div class="op-leg"><div class="op-leg-a">'+op.l1.a+'</div><div class="op-leg-p buy">'+op.l1.p+'</div></div><div class="op-leg"><div class="op-leg-a">'+op.l2.a+'</div><div class="op-leg-p sell">'+op.l2.p+'</div></div></div><div class="op-conv"><span class="op-conv-l">Conviction</span><div class="op-conv-bar"><div class="op-conv-f" style="width:'+op.conv+'%"></div></div><span class="op-conv-pct">'+op.conv+'%</span></div></div>';
   var sigTxt=s.act==='LONG'?'LONG':s.act==='SHORT'?'SHORT':'NEUTRE';
   var sigArrow=s.act==='LONG'?'↑ ':s.act==='SHORT'?'↓ ':'◆ ';
@@ -806,7 +872,7 @@ function renderCard(d,coll){
     +'<div class="sig-row"><div><div style="font-size:8px;font-weight:700;letter-spacing:.15em;color:var(--muted);text-transform:uppercase;margin-bottom:2px;">Signal</div><div class="sig-action '+s.act+'">'+sigArrow+sigTxt+'</div></div><div class="sig-desc">'+s.desc+'</div><div><div class="sig-conf '+s.act+'">'+s.conf+'%</div><div class="sig-conf-l">confiance</div></div></div>'
     +'<div class="conf-bar"><div class="conf-track"><div class="conf-fill '+s.act+'" style="width:'+s.conf+'%"></div></div></div>'
     +'<div class="est-grid"><div class="est-cell"><div class="est-lbl">Entry</div><div class="est-v">'+d.entry+'</div></div><div class="est-cell"><div class="est-lbl">Stop</div><div class="est-v stop">'+d.stop+'</div><div class="est-sub">'+d.stopP+'%</div></div><div class="est-cell"><div class="est-lbl">Target</div><div class="est-v tgt">'+d.tgt+'</div><div class="est-sub">'+d.tgtP+'%</div></div></div>'
-    +'<div class="metrics"><span class="mc">R:R <span>2.1:1</span></span><span class="mc">SCORE <span>'+s.score+'/100</span></span><span class="mc">ADX <span>'+s.adx+'</span></span><span class="mc">RSI <span>'+d.ind.rsi.toFixed(0)+'</span></span></div>'
+    +'<div class="metrics"><span class="mc">R:R <span>2.1:1</span></span><span class="mc">SCORE <span>'+s.score+'/100</span></span><span class="mc">ADX <span>'+s.adx+'</span></span><span class="mc">ICS <span>'+s.ics+'</span></span><span class="mc">VOL <span>'+s.vol+'x</span></span></div>'
     +'<div id="cb-'+id+'" style="'+(coll?'display:none':'')+'"><div class="ind-list">'+iH+'</div><div class="ew-sec"><div class="ew-title">EARLY WARNING SIGNALS</div>'+eH+'</div><div class="op-sec"><div class="op-tl">OPTIONS PLAY</div>'+oH+'</div></div>'
     +'<button class="expand-btn" id="eb-'+id+'" onclick="togCard(\''+id+'\')">'+( coll?'▼ VOIR DETAILS':'▲ REDUIRE')+'</button>'
     +'</div>';
@@ -1054,20 +1120,42 @@ var RSS_FEEDS=[
   {name:'Seeking Alpha',short:'SA',tag:'stocks',url:'https://seekingalpha.com/feed.xml'}
 ];
 var RSS_PROXY='https://api.rss2json.com/v1/api.json?rss_url=';
+async function fetchFeed(url){
+  // Try rss2json
+  try{
+    var r=await fetch(RSS_PROXY+encodeURIComponent(url)+'&count=10&api_key=public');
+    if(r.ok){var d=await r.json();if(d&&d.items&&d.items.length>0)return d.items;}
+  }catch(e){}
+  // Try allorigins fallback
+  try{
+    var r2=await fetch('https://api.allorigins.win/get?url='+encodeURIComponent(url));
+    var d2=await r2.json();
+    if(d2&&d2.contents){
+      var parser=new DOMParser();
+      var xml=parser.parseFromString(d2.contents,'text/xml');
+      var items=xml.querySelectorAll('item');
+      var res=[];
+      items.forEach(function(item){
+        res.push({title:item.querySelector('title')?item.querySelector('title').textContent:'',pubDate:item.querySelector('pubDate')?item.querySelector('pubDate').textContent:''});
+      });
+      if(res.length>0) return res.slice(0,10);
+    }
+  }catch(e){}
+  return [];
+}
 async function loadRSS(){
   var c=document.getElementById('rss-cont');if(!c)return;
   c.innerHTML='<div class="rss-loading">Chargement flux news...</div>';
   rssItems=[];
   var promises=RSS_FEEDS.map(async function(feed){
     try{
-      var r=await fetch(RSS_PROXY+encodeURIComponent(feed.url)+'&count=8&api_key=public');
-      var d=await r.json();
-      if(d&&d.items){
-        d.items.forEach(function(item){
-          var pub=item.pubDate?new Date(item.pubDate):new Date();
-          rssItems.push({source:feed.name,short:feed.short,tag:feed.tag,title:item.title||'',link:item.link||'',time:pub,ago:Math.round((Date.now()-pub)/60000)});
-        });
-      }
+      var items=await fetchFeed(feed.url);
+      items.forEach(function(item){
+        var pub=item.pubDate?new Date(item.pubDate):new Date();
+        if(item.title&&item.title.trim()){
+          rssItems.push({source:feed.name,short:feed.short,tag:feed.tag,title:item.title.trim(),link:item.link||'',time:pub,ago:Math.round((Date.now()-pub)/60000)});
+        }
+      });
     }catch(e){}
   });
   await Promise.allSettled(promises);

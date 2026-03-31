@@ -236,7 +236,7 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-siz
 .fav-stat-v{font-size:18px;font-weight:300;color:#fff;}
 .fav-stat-l{font-size:8px;color:var(--muted);text-transform:uppercase;}
 .fav-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:30px;}
-.news-desk{display:flex;flex-direction:column;height:100%;overflow:hidden;background:var(--bg);}
+.news-desk{display:flex;flex-direction:column;flex:1;overflow:hidden;background:var(--bg);min-height:0;}
 .news-iz{padding:10px 12px;background:var(--surf2);border-bottom:1px solid var(--b2);display:flex;flex-direction:column;gap:8px;flex-shrink:0;}
 .news-ta{width:100%;background:var(--bg2);border:1px solid var(--b2);color:#fff!important;font-family:var(--mono);font-size:11px;line-height:1.6;padding:9px 11px;resize:none;outline:none;min-height:68px;max-height:110px;color-scheme:dark;}
 .news-ta:focus{border-color:var(--acc2);}
@@ -246,7 +246,7 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-siz
 .news-sub:disabled{opacity:.4;cursor:not-allowed;}
 .news-clr{padding:10px 12px;background:none;border:1px solid var(--b2);color:var(--muted);font-family:var(--mono);font-size:9px;cursor:pointer;}
 .news-hint{font-size:9px;color:var(--muted);}
-.news-feed{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 12px;display:flex;flex-direction:column;gap:10px;background:var(--bg);}
+.news-feed{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 12px;display:flex;flex-direction:column;gap:10px;background:var(--bg);min-height:0;}
 .msg-user{align-self:flex-end;max-width:90%;background:linear-gradient(135deg,var(--acc),var(--acc2));padding:10px 12px;border-radius:12px 12px 2px 12px;font-size:12px;color:#fff;line-height:1.5;}
 .msg-user-lbl{font-size:8px;font-weight:700;letter-spacing:.14em;opacity:.75;margin-bottom:4px;text-transform:uppercase;}
 .msg-ai{align-self:flex-start;width:100%;background:var(--surf);border:1px solid var(--b2);border-radius:2px 12px 12px 12px;overflow:hidden;}
@@ -431,56 +431,79 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-siz
     <div class="topbar-r"><div><div id="clock">--:--:--</div><div id="datesm">---</div></div><div class="live-badge"><div class="live-dot"></div><span class="live-txt">LIVE</span></div></div>
   </div>
   <div class="tabs">
-    <button class="tab active" onclick="goTab(0,this)">⚡ Signaux</button>
-    <button class="tab" onclick="goTab(1,this)">📊 Indicateurs</button>
-    <button class="tab" onclick="goTab(2,this)">📅 Agenda</button>
-    <button class="tab" onclick="goTab(3,this)">⭐ Favoris<span class="fav-cnt" id="fav-badge" style="display:none">0</span></button>
-    <button class="tab" onclick="goTab(4,this)">🗞 News Desk</button>
-    <button class="tab" onclick="goTab(5,this)">📰 Flux RSS</button>
-    <button class="tab" onclick="goTab(6,this)">🌡️ Marche</button>
-    <button class="tab" onclick="goTab(7,this)">📋 Secteurs</button>
-    <button class="tab" onclick="goTab(8,this)">🔬 Fondamentaux</button>
-    <button class="tab" onclick="goTab(9,this)">⚙️ Reglages</button>
+    <button class="tab active" onclick="goTab(0,this)">📰 News</button>
+    <button class="tab" onclick="goTab(1,this)">⚡ Signaux</button>
+    <button class="tab" onclick="goTab(2,this)">📅 Agenda<span class="fav-cnt" id="fav-badge" style="display:none">0</span></button>
+    <button class="tab" onclick="goTab(3,this)">🧠 News Analyser</button>
+    <button class="tab" onclick="goTab(4,this)">🌡️ Fear &amp; Greed</button>
+    <button class="tab" onclick="goTab(5,this)">📋 Secteurs</button>
+    <button class="tab" onclick="goTab(6,this)">🔬 Fondamentaux</button>
+    <button class="tab" onclick="goTab(7,this)">⚙️ Reglages</button>
   </div>
+  <!-- V0: NEWS RSS -->
   <div class="view" id="v0">
+    <div class="rss-filters">
+      <button class="rfc active" onclick="setRssF('all',this)">Tous</button>
+      <button class="rfc" onclick="setRssF('macro',this)">📊 Macro</button>
+      <button class="rfc" onclick="setRssF('forex',this)">💱 Forex</button>
+      <button class="rfc" onclick="setRssF('crypto',this)">₿ Crypto</button>
+      <button class="rfc" onclick="setRssF('stocks',this)">📈 Actions</button>
+    </div>
+    <div class="scroll"><div id="rss-cont"><div class="rss-loading">⟳ Chargement flux news...</div></div></div>
+  </div>
+
+  <!-- V1: SIGNAUX + INDICATEURS fusionnes -->
+  <div class="view hidden" id="v1">
     <div class="sess-bar" id="sess0"></div>
     <div id="cac-bar" style="padding:5px 12px;background:var(--bg2);border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:10px;flex-shrink:0;font-size:9px;">
       <span style="color:var(--muted);font-weight:700;letter-spacing:.1em;">INDICES</span>
-      <span id="cac-val" style="color:var(--acc2);font-weight:600;">🇫🇷 CAC40 <span id="cac-price" style="color:#fff;">—</span> <span id="cac-chg">—</span></span>
-      <span id="dax-val" style="color:var(--acc2);font-weight:600;">🇩🇪 DAX <span id="dax-price" style="color:#fff;">—</span> <span id="dax-chg">—</span></span>
-      <span id="spx-val" style="color:var(--acc2);font-weight:600;">🇺🇸 SPX <span id="spx-price" style="color:#fff;">—</span> <span id="spx-chg">—</span></span>
+      <span style="color:var(--acc2);font-weight:600;">🇫🇷 CAC40 <span id="cac-price" style="color:#fff;">—</span> <span id="cac-chg">—</span></span>
+      <span style="color:var(--acc2);font-weight:600;">🇩🇪 DAX <span id="dax-price" style="color:#fff;">—</span> <span id="dax-chg">—</span></span>
+      <span style="color:var(--acc2);font-weight:600;">🇺🇸 SPX <span id="spx-price" style="color:#fff;">—</span> <span id="spx-chg">—</span></span>
     </div>
     <div class="search-bar"><input class="search-inp" id="sinp" placeholder="Ticker (AAPL, BTC/USD, EUR/USD...)"><button class="search-btn" onclick="doSearch()">ANALYSER</button></div>
-    <div class="scroll"><div id="wl-cont"></div></div>
-  </div>
-  <div class="view hidden" id="v1"><div class="scroll"><div id="ind-cont"><div class="empty">Selectionnez un actif dans Signaux</div></div></div></div>
-  <div class="view hidden" id="v2">
-    <div class="sec-label">📅 Agenda Economique — 3 Semaines<span style="font-size:8px;color:var(--muted)">Donnees statiques</span></div>
-    <div class="scroll"><div id="cal-cont"></div></div>
-  </div>
-  <div class="view hidden" id="v3">
-    <div class="fav-filters">
-      <button class="fc active" onclick="setFF('ALL',this)">Tous</button>
-      <button class="fc" onclick="setFF('HIGH',this)">🔴 Fort</button>
-      <button class="fc" onclick="setFF('MED',this)">🟡 Modere</button>
-      <button class="fc" onclick="setFF('US',this)">🇺🇸 US</button>
-      <button class="fc" onclick="setFF('EU',this)">🇪🇺 EU</button>
-      <button class="fc" onclick="setFF('upcoming',this)">⏳ A venir</button>
+    <!-- Tabs internes Signaux/Indicateurs -->
+    <div style="display:flex;background:var(--surf);border-bottom:1px solid var(--b2);flex-shrink:0;">
+      <button id="sig-tab" style="flex:1;padding:8px;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border:none;background:none;font-family:var(--mono);color:var(--acc2);border-bottom:2px solid var(--acc2);cursor:pointer;" onclick="showSigPane('signals')">⚡ SIGNAUX</button>
+      <button id="ind-tab" style="flex:1;padding:8px;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border:none;background:none;font-family:var(--mono);color:var(--muted);border-bottom:2px solid transparent;cursor:pointer;" onclick="showSigPane('indicators')">📊 INDICATEURS</button>
     </div>
-    <div class="scroll"><div id="fav-cont"></div></div>
+    <div class="scroll" id="sig-pane"><div id="wl-cont"><div class="empty" style="padding:50px 20px;">⚡<br><br>Tape un ticker et clique ANALYSER<br><br><span style="font-size:9px;color:var(--muted)">Ex: AAPL · BTC/USD · EUR/USD · XAU/USD · SPX</span></div></div></div>
+    <div class="scroll hidden" id="ind-pane"><div id="ind-cont"><div class="empty">Analyse un actif pour voir ses indicateurs</div></div></div>
   </div>
-  <div class="view hidden" id="v4">
+
+  <!-- V2: AGENDA + FAVORIS -->
+  <div class="view hidden" id="v2">
+    <div style="display:flex;background:var(--surf);border-bottom:1px solid var(--b2);flex-shrink:0;">
+      <button id="cal-tab" style="flex:1;padding:8px;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border:none;background:none;font-family:var(--mono);color:var(--acc2);border-bottom:2px solid var(--acc2);cursor:pointer;" onclick="showCalPane('calendar')">📅 AGENDA</button>
+      <button id="fav-tab" style="flex:1;padding:8px;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border:none;background:none;font-family:var(--mono);color:var(--muted);border-bottom:2px solid transparent;cursor:pointer;" onclick="showCalPane('favs')">⭐ FAVORIS <span id="fav-badge" style="display:none;background:rgba(245,158,11,.85);color:#000;font-size:7px;font-weight:700;padding:1px 5px;border-radius:7px;vertical-align:middle;">0</span></button>
+    </div>
+    <div class="scroll" id="cal-pane"><div id="cal-cont"></div></div>
+    <div class="scroll hidden" id="fav-pane">
+      <div style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--surf2);border-bottom:1px solid var(--b1);flex-shrink:0;overflow-x:auto;">
+        <button class="fc active" onclick="setFF('ALL',this)">Tous</button>
+        <button class="fc" onclick="setFF('HIGH',this)">🔴 Fort</button>
+        <button class="fc" onclick="setFF('MED',this)">🟡 Modere</button>
+        <button class="fc" onclick="setFF('US',this)">🇺🇸 US</button>
+        <button class="fc" onclick="setFF('EU',this)">🇪🇺 EU</button>
+        <button class="fc" onclick="setFF('upcoming',this)">⏳ A venir</button>
+      </div>
+      <div id="fav-cont"></div>
+    </div>
+  </div>
+
+  <!-- V3: NEWS ANALYSER -->
+  <div class="view hidden" id="v3">
     <div class="news-desk">
       <div class="news-iz">
         <textarea class="news-ta" id="nta" rows="3" placeholder="Colle une news, tweet, headline..."></textarea>
         <div class="news-row"><button class="news-sub" id="nbtn" onclick="doNews()">🧠 ANALYSER L'IMPACT</button><button class="news-clr" onclick="resetNews()">RESET</button></div>
-        <div class="news-hint">💡 Gemini analyse l'impact sur Forex · Indices · Gold · Crypto</div>
+        <div class="news-hint">💡 Groq IA analyse l'impact sur Forex · Indices · Gold · Crypto</div>
       </div>
       <div class="news-feed" id="nfeed">
         <div class="news-empty" id="ne-empty">
-          <div class="ne-icon">🗞</div>
-          <div class="ne-title">News Desk · Analyse IA</div>
-          <div class="ne-sub">Colle une info ou envoie depuis le Flux RSS</div>
+          <div class="ne-icon">🧠</div>
+          <div class="ne-title">News Analyser · Groq IA</div>
+          <div class="ne-sub">Colle une info ou envoie depuis le Flux News</div>
           <div class="examples">
             <div class="ex-chip" onclick="useEx(this)">Fed hawkish surprise</div>
             <div class="ex-chip" onclick="useEx(this)">NFP beats +250K</div>
@@ -493,17 +516,9 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-siz
       </div>
     </div>
   </div>
-  <div class="view hidden" id="v5">
-    <div class="rss-filters">
-      <button class="rfc active" onclick="setRssF('all',this)">Tous</button>
-      <button class="rfc" onclick="setRssF('macro',this)">📊 Macro</button>
-      <button class="rfc" onclick="setRssF('forex',this)">💱 Forex</button>
-      <button class="rfc" onclick="setRssF('crypto',this)">₿ Crypto</button>
-      <button class="rfc" onclick="setRssF('stocks',this)">📈 Actions</button>
-    </div>
-    <div class="scroll"><div id="rss-cont"><div class="rss-loading">⟳ Chargement flux news...</div></div></div>
-  </div>
-  <div class="view hidden" id="v6">
+
+  <!-- V4: FEAR & GREED + SESSIONS + HEATMAP -->
+  <div class="view hidden" id="v4">
     <div class="scroll">
       <div style="padding:8px 12px 0;font-size:8px;font-weight:700;letter-spacing:.18em;color:var(--acc2);text-transform:uppercase;background:var(--bg);">🕐 Sessions de Trading</div>
       <div class="sess-bar" id="sess6"></div>
@@ -532,12 +547,16 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-siz
       </div>
     </div>
   </div>
-  <div class="view hidden" id="v7">
+
+  <!-- V5: SECTEURS -->
+  <div class="view hidden" id="v5">
     <div class="scroll" id="sec-cont">
       <div style="padding:10px 12px 4px;font-size:8px;font-weight:700;letter-spacing:.15em;color:var(--muted);text-transform:uppercase;background:var(--bg);">Tes listes sectorielles personnalisees</div>
     </div>
   </div>
-  <div class="view hidden" id="v8">
+
+  <!-- V6: FONDAMENTAUX -->
+  <div class="view hidden" id="v6">
     <div class="fund-desk">
       <div class="fund-iz">
         <div class="fund-row"><input class="fund-inp" id="finp" placeholder="Ticker : AAPL, TSLA, NVDA..." maxlength="12"><button class="fund-btn" id="fbtn" onclick="doFund()">🔬 ANALYSER</button></div>
@@ -548,7 +567,8 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-siz
       </div>
     </div>
   </div>
-  <div class="view hidden" id="v9">
+
+  <div class="view hidden" id="v7">
     <div class="sw">
       <div class="sc">
         <div class="sc-t">⚡ Alertes</div>
@@ -571,11 +591,11 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-siz
     </div>
   </div>
   <div class="bnav">
-    <button class="nb active" onclick="goNav(0,this)"><span class="nb-icon">⚡</span><span class="nb-lbl">Signaux</span></button>
-    <button class="nb" onclick="goNav(5,this)"><span class="nb-icon">📰</span><span class="nb-lbl">News</span></button>
-    <button class="nb" onclick="goNav(6,this)"><span class="nb-icon">🌡️</span><span class="nb-lbl">Marche</span></button>
-    <button class="nb" onclick="goNav(4,this)"><span class="nb-icon">🗞</span><span class="nb-lbl">Desk</span></button>
-    <button class="nb" onclick="goNav(8,this)"><span class="nb-icon">🔬</span><span class="nb-lbl">Analyse</span></button>
+    <button class="nb active" onclick="goNav(0,this)"><span class="nb-icon">📰</span><span class="nb-lbl">News</span></button>
+    <button class="nb" onclick="goNav(1,this)"><span class="nb-icon">⚡</span><span class="nb-lbl">Signaux</span></button>
+    <button class="nb" onclick="goNav(3,this)"><span class="nb-icon">🧠</span><span class="nb-lbl">Analyser</span></button>
+    <button class="nb" onclick="goNav(4,this)"><span class="nb-icon">🌡️</span><span class="nb-lbl">F&amp;G</span></button>
+    <button class="nb" onclick="goNav(6,this)"><span class="nb-icon">🔬</span><span class="nb-lbl">Fondament.</span></button>
   </div>
 </div>
 <script>
@@ -609,7 +629,7 @@ setInterval(tick,1000);tick();
 
 function goTab(idx,btn){
   curView=idx;
-  for(var i=0;i<10;i++){
+  for(var i=0;i<8;i++){
     var el=document.getElementById('v'+i);
     if(el){if(i===idx)el.classList.remove('hidden');else el.classList.add('hidden');}
   }
@@ -621,7 +641,7 @@ function goNav(idx,btn){
   document.querySelectorAll('.nb').forEach(function(b){b.classList.remove('active');});
   if(btn) btn.classList.add('active');
   curView=idx;
-  for(var i=0;i<10;i++){
+  for(var i=0;i<8;i++){
     var el=document.getElementById('v'+i);
     if(el){if(i===idx)el.classList.remove('hidden');else el.classList.add('hidden');}
   }
@@ -633,10 +653,39 @@ function goNav(idx,btn){
   onVC(idx);
 }
 function onVC(idx){
-  if(idx===3) renderFavs();
-  if(idx===5){if(!rssItems.length) loadRSS();else renderRSS();}
-  if(idx===6){renderSessions('sess6');loadFearGreed();loadHeatmap();}
-  if(idx===7) renderSectors();
+  if(idx===0){if(!rssItems.length) loadRSS();else renderRSS();}
+  if(idx===1) renderSessions('sess0');
+  if(idx===2) renderFavs();
+  if(idx===4){renderSessions('sess6');loadFearGreed();loadHeatmap();}
+  if(idx===5) renderSectors();
+}
+
+function showSigPane(pane){
+  var sp=document.getElementById('sig-pane'),ip=document.getElementById('ind-pane');
+  var st=document.getElementById('sig-tab'),it=document.getElementById('ind-tab');
+  if(pane==='signals'){
+    if(sp)sp.classList.remove('hidden');if(ip)ip.classList.add('hidden');
+    if(st){st.style.color='var(--acc2)';st.style.borderBottomColor='var(--acc2)';}
+    if(it){it.style.color='var(--muted)';it.style.borderBottomColor='transparent';}
+  }else{
+    if(sp)sp.classList.add('hidden');if(ip)ip.classList.remove('hidden');
+    if(st){st.style.color='var(--muted)';st.style.borderBottomColor='transparent';}
+    if(it){it.style.color='var(--acc2)';it.style.borderBottomColor='var(--acc2)';}
+  }
+}
+function showCalPane(pane){
+  var cp=document.getElementById('cal-pane'),fp=document.getElementById('fav-pane');
+  var ct=document.getElementById('cal-tab'),ft=document.getElementById('fav-tab');
+  if(pane==='calendar'){
+    if(cp)cp.classList.remove('hidden');if(fp)fp.classList.add('hidden');
+    if(ct){ct.style.color='var(--acc2)';ct.style.borderBottomColor='var(--acc2)';}
+    if(ft){ft.style.color='var(--muted)';ft.style.borderBottomColor='transparent';}
+  }else{
+    if(cp)cp.classList.add('hidden');if(fp)fp.classList.remove('hidden');
+    if(ct){ct.style.color='var(--muted)';ct.style.borderBottomColor='transparent';}
+    if(ft){ft.style.color='var(--acc2)';ft.style.borderBottomColor='var(--acc2)';}
+    renderFavs();
+  }
 }
 
 async function tdFetch(ep,params){
@@ -906,6 +955,8 @@ async function doSearch(){
   var el=document.getElementById('srch-tmp');if(el)el.remove();
   c.insertAdjacentHTML('afterbegin',renderCard(d,false));
   document.getElementById('ind-cont').innerHTML=renderInd(d);
+  // Auto-show indicators pane after search
+  showSigPane('indicators');
   inp.value='';
   showAl({type:'sig',imp:d.sig.conf>70?'H':'M',icon:'⚡',lbl:'SIGNAL '+d.disp+' '+d.sig.act,title:(d.sig.act==='LONG'?'↑':d.sig.act==='SHORT'?'↓':'◆')+' '+d.disp+' '+d.sig.act+' '+d.sig.conf+'%',detail:'Entry '+d.entry+' Stop '+d.stop+' Target '+d.tgt});
 }
@@ -1022,9 +1073,9 @@ function togFav(id,btn){
   if(FAVS.has(id)){FAVS.delete(id);btn.classList.remove('on');var r=document.getElementById('ev-'+id);if(r)r.classList.remove('faved');}
   else{FAVS.add(id);btn.classList.add('on');var r2=document.getElementById('ev-'+id);if(r2)r2.classList.add('faved');}
   var b=document.getElementById('fav-badge');if(b){b.textContent=FAVS.size;b.style.display=FAVS.size>0?'inline-flex':'none';}
-  if(curView===3) renderFavs();
+  if(curView===2) renderFavs();
 }
-function setFF(f,btn){favF=f;document.querySelectorAll('.fc').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');renderFavs();}
+
 function renderFavs(){
   var body=document.getElementById('fav-cont');if(!body)return;
   var evs=CAL.filter(function(ev){return ev.id&&FAVS.has(ev.id);});
@@ -1053,6 +1104,7 @@ function renderFavs(){
   body.innerHTML=html;
 }
 function rmFav(id){FAVS.delete(id);var b=document.getElementById('fav-badge');if(b){b.textContent=FAVS.size;b.style.display=FAVS.size>0?'inline-flex':'none';}renderFavs();}
+function setFF(f,btn){favF=f;document.querySelectorAll('#fav-pane .fc').forEach(function(b){b.classList.remove('active');});if(btn)btn.classList.add('active');renderFavs();}
 
 var EX={
   'Fed hawkish surprise':'La Fed a surpris avec un ton hawkish. Powell indique que la Fed nest pas pressee de baisser les taux. Le dot plot montre 2 baisses en 2025 vs 4 attendues.',
@@ -1161,14 +1213,14 @@ function renderRSS(){
     var hl=xss(item.title);
     var ago=item.ago<60?item.ago+'m':Math.round(item.ago/60)+'h';
     var safe=item.title.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,' ');
-    return '<div class="rss-item"><div class="rss-src">'+item.short+'</div><div class="rss-body"><div class="rss-source">'+item.source+' - '+ago+'</div><div class="rss-headline">'+hl+'</div></div><button class="rss-btn" onclick="sendToDesk(\''+safe+'\')">Desk</button></div>';
+    return '<div class="rss-item"><div class="rss-src">'+item.short+'</div><div class="rss-body"><div class="rss-source">'+item.source+' - '+ago+'</div><div class="rss-headline">'+hl+'</div></div><div style="display:flex;gap:6px;margin-top:5px;align-items:center;">'+(item.link&&item.link!=='#'?'<a href="'+item.link+'" target="_blank" rel="noopener" style="font-size:8px;color:var(--cyn);text-decoration:none;border:1px solid rgba(6,182,212,.3);padding:3px 7px;">🔗 Lire</a>':'')+'<button class="rss-btn" onclick="sendToDesk(\''+safe+'\')">🧠 Analyser</button></div></div></div>';
   }).join('');
 }
 function setRssF(f,btn){rssFilter=f;document.querySelectorAll('.rfc').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');renderRSS();}
 function sendToDesk(headline){
-  goTab(4,null);
-  document.querySelectorAll('.tab').forEach(function(b){var oc=b.getAttribute('onclick')||'';if(oc.indexOf('goTab(4,')>=0)b.classList.add('active');else b.classList.remove('active');});
-  document.querySelectorAll('.nb').forEach(function(b){var oc=b.getAttribute('onclick')||'';if(oc.indexOf('goNav(4,')>=0)b.classList.add('active');else b.classList.remove('active');});
+  goTab(3,null);
+  document.querySelectorAll('.tab').forEach(function(b){var oc=b.getAttribute('onclick')||'';if(oc.indexOf('goTab(3,')>=0)b.classList.add('active');else b.classList.remove('active');});
+  document.querySelectorAll('.nb').forEach(function(b){var oc=b.getAttribute('onclick')||'';if(oc.indexOf('goNav(3,')>=0)b.classList.add('active');else b.classList.remove('active');});
   var ta=document.getElementById('nta');if(ta){ta.value=headline;ta.focus();}
 }
 
@@ -1226,24 +1278,36 @@ var HM_SECTORS=[
 async function loadHeatmap(){
   var grid=document.getElementById('hm-grid');if(!grid)return;
   grid.innerHTML='<div class="rss-loading">Chargement secteurs...</div>';
-  try{
-    var syms=HM_SECTORS.map(function(s){return s.sym;}).join(',');
-    var r=await tdFetch('/quote','symbol='+encodeURIComponent(syms));
-    var quotes=Array.isArray(r)?r:[r];
-    var byS={};
-    quotes.forEach(function(q){if(q&&q.symbol)byS[q.symbol]=q;});
-    grid.innerHTML=HM_SECTORS.map(function(s){
-      var q=byS[s.sym];
-      var chg=q?parseFloat(q.percent_change||0):0;
-      var price=q?parseFloat(q.close||0):0;
-      var intensity=Math.min(Math.abs(chg)/3,1);
-      var bg=chg>0?'rgba(16,185,129,'+(0.1+intensity*0.4)+')':chg<0?'rgba(239,68,68,'+(0.1+intensity*0.4)+')':'rgba(61,82,102,.3)';
-      var col=chg>0?'#10b981':chg<0?'#ef4444':'#3d5266';
-      return '<div class="hm-cell" style="background:'+bg+'"><div class="hm-name">'+s.name+'</div><div class="hm-chg" style="color:'+col+'">'+(chg>=0?'+':'')+chg.toFixed(2)+'%</div><div class="hm-sym">'+s.sym+'</div></div>';
-    }).join('');
-  }catch(e){grid.innerHTML='<div class="rss-loading">Erreur heatmap</div>';}
+  var results=[];
+  for(var i=0;i<HM_SECTORS.length;i++){
+    try{
+      var q=await getQuote(HM_SECTORS[i].sym);
+      results.push({sec:HM_SECTORS[i],q:q});
+    }catch(e){results.push({sec:HM_SECTORS[i],q:null});}
+    if(i<HM_SECTORS.length-1) await new Promise(function(r){setTimeout(r,200);});
+  }
+  grid.innerHTML=results.map(function(item){
+    var s=item.sec,q=item.q;
+    var chg=q?q.dp:0;
+    var price=q?q.c:0;
+    var intensity=Math.min(Math.abs(chg)/3,1);
+    var bg=chg>0?'rgba(16,185,129,'+(0.1+intensity*0.4)+')':chg<0?'rgba(239,68,68,'+(0.1+intensity*0.4)+')':'rgba(61,82,102,.3)';
+    var col=chg>0?'#10b981':chg<0?'#ef4444':'#3d5266';
+    return '<div class="hm-cell" style="background:'+bg+'"><div class="hm-name">'+s.name+'</div><div class="hm-chg" style="color:'+col+'">'+(chg>=0?'+':'')+chg.toFixed(2)+'%</div><div class="hm-sym">'+s.sym+' $'+price.toFixed(2)+'</div></div>';
+  }).join('');
 }
 
+var secFundScores={};
+async function loadFundScore(sym){
+  try{
+    var prompt='Donne un verdict rapide sur '+sym+' en JSON: {"verdict":"BUY","score":72} verdict=BUY/HOLD/SELL score=0-100. JSON uniquement.';
+    var raw=await gmFetch(prompt,100);
+    var ix=raw.indexOf('{'),ix2=raw.lastIndexOf('}');
+    var parsed=JSON.parse(ix>=0?raw.slice(ix,ix2+1):'{}');
+    secFundScores[sym]={verdict:parsed.verdict||'HOLD',score:parsed.score||50};
+    renderSectors();
+  }catch(e){}
+}
 function loadSectors(){
   try{var saved=localStorage.getItem('sdp_sectors');if(saved)sectors=JSON.parse(saved);}catch(e){}
   if(!sectors.length){
@@ -1443,6 +1507,7 @@ function hideLoad(){var l=document.getElementById('loading');l.classList.add('ou
 loadWL();
 loadCal();
 loadSectors();
+loadRSS();
 renderSessions('sess0');
 setInterval(function(){renderSessions('sess0');renderSessions('sess6');},60000);
 setInterval(loadRSS,300000);

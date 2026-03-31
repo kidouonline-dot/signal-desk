@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src *; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://fonts.googleapis.com https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:;">
+
 <title>SIGNAL DESK PRO</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 <style>
@@ -432,6 +432,12 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-siz
   </div>
   <div class="view" id="v0">
     <div class="sess-bar" id="sess0"></div>
+    <div id="cac-bar" style="padding:5px 12px;background:var(--bg2);border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:10px;flex-shrink:0;font-size:9px;">
+      <span style="color:var(--muted);font-weight:700;letter-spacing:.1em;">INDICES</span>
+      <span id="cac-val" style="color:var(--acc2);font-weight:600;">🇫🇷 CAC40 <span id="cac-price" style="color:#fff;">—</span> <span id="cac-chg">—</span></span>
+      <span id="dax-val" style="color:var(--acc2);font-weight:600;">🇩🇪 DAX <span id="dax-price" style="color:#fff;">—</span> <span id="dax-chg">—</span></span>
+      <span id="spx-val" style="color:var(--acc2);font-weight:600;">🇺🇸 SPX <span id="spx-price" style="color:#fff;">—</span> <span id="spx-chg">—</span></span>
+    </div>
     <div class="search-bar"><input class="search-inp" id="sinp" placeholder="Ticker (AAPL, BTC/USD, EUR/USD...)"><button class="search-btn" onclick="doSearch()">ANALYSER</button></div>
     <div class="scroll"><div id="wl-cont"></div></div>
   </div>
@@ -568,14 +574,7 @@ var GM_URL='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-f
 var DN=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
 var MN=['Jan','Fev','Mar','Avr','Mai','Jun','Jul','Aou','Sep','Oct','Nov','Dec'];
 var curView=0;
-var WL=[
-  {sym:'SPX',disp:'S&P 500',name:'S&P 500 Index'},
-  {sym:'BTC/USD',disp:'BTC/USD',name:'Bitcoin'},
-  {sym:'EUR/USD',disp:'EUR/USD',name:'Euro Dollar'},
-  {sym:'AAPL',disp:'AAPL',name:'Apple Inc.'},
-  {sym:'XAU/USD',disp:'GOLD',name:'Or XAU'},
-  {sym:'ETH/USD',disp:'ETH/USD',name:'Ethereum'}
-];
+var WL=[];
 var AD={};
 var CAL=[];
 var FAVS=new Set();
@@ -822,15 +821,7 @@ function togCard(id){
 
 async function loadWL(){
   var c=document.getElementById('wl-cont');
-  c.innerHTML='<div class="empty">Analyse en cours...<br>MACD - RSI - Bollinger - Stoch</div>';
-  var res=[];
-  for(var i=0;i<WL.length;i++){
-    res.push(await fetchAsset(WL[i]));
-    if(i<WL.length-1) await new Promise(function(r){setTimeout(r,300);});
-  }
-  res.forEach(function(d){AD[d.sym]=d;});
-  c.innerHTML=res.map(function(d,i){return renderCard(d,i>0);}).join('');
-  if(res.length) document.getElementById('ind-cont').innerHTML=renderInd(res[0]);
+  c.innerHTML='<div class="empty" style="padding:50px 20px;">⚡<br><br>Tape un ticker et clique ANALYSER<br><br><span style="font-size:9px;color:var(--muted)">Ex: AAPL · BTC/USD · EUR/USD · XAU/USD · SPX</span></div>';
   hideLoad();
 }
 async function doSearch(){
@@ -1055,11 +1046,12 @@ function buildAIBubble(data,time){
 }
 
 var RSS_FEEDS=[
-  {name:'Reuters',short:'REU',tag:'macro',url:'https://feeds.reuters.com/reuters/businessNews'},
-  {name:'CNBC',short:'CNBC',tag:'macro',url:'https://www.cnbc.com/id/100003114/device/rss/rss.html'},
-  {name:'CoinDesk',short:'CD',tag:'crypto',url:'https://www.coindesk.com/arc/outboundfeeds/rss/'},
-  {name:'FX Live',short:'FX',tag:'forex',url:'https://www.forexlive.com/feed/news'},
-  {name:'Investing',short:'INV',tag:'stocks',url:'https://www.investing.com/rss/news.rss'}
+  {name:'Reuters',short:'REU',tag:'macro',url:'https://feeds.reuters.com/reuters/topNews'},
+  {name:'CNBC',short:'CNBC',tag:'macro',url:'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100727362'},
+  {name:'MarketWatch',short:'MW',tag:'stocks',url:'https://feeds.marketwatch.com/marketwatch/topstories/'},
+  {name:'CoinDesk',short:'CD',tag:'crypto',url:'https://www.coindesk.com/arc/outboundfeeds/rss/?outputType=xml'},
+  {name:'FX Street',short:'FX',tag:'forex',url:'https://www.fxstreet.com/rss/news'},
+  {name:'Seeking Alpha',short:'SA',tag:'stocks',url:'https://seekingalpha.com/feed.xml'}
 ];
 var RSS_PROXY='https://api.rss2json.com/v1/api.json?rss_url=';
 async function loadRSS(){
@@ -1344,6 +1336,29 @@ function playBip(lvl){
     o.start();o.stop(ctx.currentTime+0.4);
   }catch(e){}
 }
+async function loadIndices(){
+  var pairs=[
+    {sym:'CAC40',pid:'cac-price',cid:'cac-chg'},
+    {sym:'DAX',pid:'dax-price',cid:'dax-chg'},
+    {sym:'SPX',pid:'spx-price',cid:'spx-chg'}
+  ];
+  for(var i=0;i<pairs.length;i++){
+    try{
+      var q=await getQuote(pairs[i].sym);
+      if(q){
+        var pe=document.getElementById(pairs[i].pid);
+        var ce=document.getElementById(pairs[i].cid);
+        if(pe) pe.textContent=q.c>1000?Math.round(q.c).toLocaleString('fr-FR'):q.c.toFixed(2);
+        if(ce){
+          var up=q.dp>=0;
+          ce.textContent=(up?'▲':'▼')+Math.abs(q.dp).toFixed(2)+'%';
+          ce.style.color=up?'var(--grn)':'var(--red)';
+        }
+      }
+    }catch(e){}
+    if(i<pairs.length-1) await new Promise(function(r){setTimeout(r,300);});
+  }
+}
 function hideLoad(){var l=document.getElementById('loading');l.classList.add('out');setTimeout(function(){l.style.display='none';},500);}
 
 loadWL();
@@ -1352,6 +1367,8 @@ loadSectors();
 renderSessions('sess0');
 setInterval(function(){renderSessions('sess0');renderSessions('sess6');},60000);
 setInterval(loadRSS,300000);
+loadIndices();
+setInterval(loadIndices,60000);
 </script>
 </body>
 </html>

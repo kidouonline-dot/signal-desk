@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 
 <title>SIGNAL DESK PRO</title>
@@ -659,6 +660,9 @@ var TD_KEY='27be7dbb09744774a1a9003abb9a6d7e';
 var TD_BASE='https://api.twelvedata.com';
 var GROQ_KEY='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';
 var GROQ_URL='https://api.groq.com/openai/v1/chat/completions';
+var OR_KEY='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';
+var OR_URL='https://openrouter.ai/api/v1/chat/completions';
+var groqQuotaUntil=0; // timestamp until which Groq is rate-limited
 var DN=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
 var MN=['Jan','Fev','Mar','Avr','Mai','Jun','Jul','Aou','Sep','Oct','Nov','Dec'];
 var curView=0;
@@ -767,22 +771,42 @@ async function getCandles(sym){
   return [];
 }
 
-async function gmFetch(prompt,maxTok){
-  var r=await fetch(GROQ_URL,{
+async function callAI(url, key, model, prompt, maxTok){
+  var r=await fetch(url,{
     method:'POST',
-    headers:{'Content-Type':'application/json','Authorization':'Bearer '+GROQ_KEY},
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
     body:JSON.stringify({
-      model:'llama-3.3-70b-versatile',
+      model:model,
       messages:[{role:'user',content:prompt}],
       temperature:0.2,
       max_tokens:maxTok||1000
     })
   });
-  if(r.status===429) throw new Error('Quota Groq atteint - reessayez dans quelques secondes');
-  if(!r.ok) throw new Error('Erreur Groq: '+r.status);
+  if(r.status===429) return {err:429};
+  if(!r.ok) return {err:r.status};
   var d=await r.json();
   var txt=d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content;
-  return txt||'{}';
+  return {txt:txt||'{}'};
+}
+
+async function gmFetch(prompt,maxTok){
+  var now=Date.now();
+  // Try Groq first (unless recently rate-limited)
+  if(now>groqQuotaUntil){
+    var g=await callAI(GROQ_URL,GROQ_KEY,'llama-3.3-70b-versatile',prompt,maxTok);
+    if(g.txt) return g.txt;
+    if(g.err===429){
+      groqQuotaUntil=now+60000; // block Groq for 60s
+      showAl({type:'sig',imp:'M',icon:'⚡',lbl:'GROQ QUOTA',title:'Basculement sur OpenRouter',detail:'Groq sature — OpenRouter actif'});
+    }
+  }
+  // Fallback: OpenRouter with Mistral
+  var o=await callAI(OR_URL,OR_KEY,'mistralai/mistral-7b-instruct:free',prompt,maxTok);
+  if(o.txt) return o.txt;
+  // Last resort: OpenRouter with Llama
+  var o2=await callAI(OR_URL,OR_KEY,'meta-llama/llama-3.1-8b-instruct:free',prompt,maxTok);
+  if(o2.txt) return o2.txt;
+  throw new Error('Tous les services IA sont indisponibles - reessayez dans 1 minute');
 }
 
 function ema(p,n){
@@ -1225,50 +1249,97 @@ var RSS_FEEDS=[
   {name:'FX Street', short:'FX',  tag:'forex',  url:'https://www.fxstreet.com/rss/news'},
   {name:'Investing', short:'INV', tag:'forex',  url:'https://www.investing.com/rss/news_285.rss'},
 ];
-var RSS_PROXY='https://api.rss2json.com/v1/api.json?rss_url=';
+async function fetchRSSFeed(feedUrl){
+  // Try rss2json first
+  try{
+    var r1=await fetch('https://api.rss2json.com/v1/api.json?rss_url='+encodeURIComponent(feedUrl)+'&count=10');
+    if(r1.ok){
+      var d1=await r1.json();
+      if(d1&&d1.status==='ok'&&d1.items&&d1.items.length>0) return d1.items;
+    }
+  }catch(e){}
+  // Try rss2json with different count
+  try{
+    var r2=await fetch('https://api.rss2json.com/v1/api.json?rss_url='+encodeURIComponent(feedUrl)+'&count=8&api_key=public');
+    if(r2.ok){
+      var d2=await r2.json();
+      if(d2&&d2.items&&d2.items.length>0) return d2.items;
+    }
+  }catch(e){}
+  return [];
+}
+
 async function loadRSS(){
   var c=document.getElementById('rss-cont');if(!c)return;
   c.innerHTML='<div class="rss-loading">⟳ Chargement flux news...</div>';
   rssItems=[];
-  var promises=RSS_FEEDS.map(async function(feed){
+  // Load feeds sequentially with small delay to avoid rate limiting
+  for(var i=0;i<RSS_FEEDS.length;i++){
+    var feed=RSS_FEEDS[i];
     try{
-      var url=RSS_PROXY+encodeURIComponent(feed.url)+'&count=10';
-      var r=await fetch(url);
-      var d=await r.json();
-      if(d&&d.status==='ok'&&d.items){
-        d.items.forEach(function(item){
-          if(!item.title||!item.title.trim()) return;
-          var pub=item.pubDate?new Date(item.pubDate):new Date();
-          rssItems.push({
-            source:feed.name,short:feed.short,tag:feed.tag,
-            title:item.title.trim(),link:item.link||'#',
-            time:pub,ago:Math.round((Date.now()-pub)/60000)
-          });
+      var items=await fetchRSSFeed(feed.url);
+      items.forEach(function(item){
+        if(!item.title||!item.title.trim()) return;
+        var pub=item.pubDate?new Date(item.pubDate):new Date();
+        if(isNaN(pub.getTime())) pub=new Date();
+        rssItems.push({
+          source:feed.name,short:feed.short,tag:feed.tag,
+          title:item.title.trim(),
+          link:item.link||item.url||'#',
+          time:pub,ago:Math.round((Date.now()-pub)/60000)
         });
-      }
+      });
     }catch(e){}
-  });
-  await Promise.allSettled(promises);
+    // Small delay between feeds to avoid hammering the proxy
+    if(i<RSS_FEEDS.length-1) await new Promise(function(r){setTimeout(r,300);});
+  }
   if(!rssItems.length){
-    c.innerHTML='<div class="rss-loading" style="padding:20px;text-align:center;">'
-      +'<div style="font-size:20px;margin-bottom:8px;">📡</div>'
-      +'<div style="color:var(--txt);margin-bottom:4px;">Flux indisponibles</div>'
-      +'<div style="font-size:9px;color:var(--muted);">Certains feeds RSS bloquent les proxys.<br>Reessayez dans quelques instants.</div>'
-      +'<button onclick="rssItems=[];loadRSS();" style="margin-top:10px;padding:6px 14px;background:var(--accg);border:1px solid var(--acc);color:var(--acc2);font-family:var(--mono);font-size:9px;cursor:pointer;">↺ Recharger</button>'
+    c.innerHTML='<div style="padding:30px 20px;text-align:center;">'
+      +'<div style="font-size:28px;margin-bottom:10px;opacity:.3">📡</div>'
+      +'<div style="font-size:11px;color:var(--txt);margin-bottom:6px;">Flux temporairement indisponibles</div>'
+      +'<div style="font-size:9px;color:var(--muted);line-height:1.6;">Le proxy RSS est rate-limite.<br>Patiente 30 secondes puis recharge.</div>'
+      +'<button onclick="rssItems=[];loadRSS();" style="margin-top:12px;padding:7px 16px;background:var(--accg);border:1px solid var(--acc);color:var(--acc2);font-family:var(--mono);font-size:9px;cursor:pointer;letter-spacing:.08em;">↺ RECHARGER</button>'
       +'</div>';
     return;
   }
   rssItems.sort(function(a,b){return a.ago-b.ago;});
   renderRSS();
+  // Auto-translate headlines
+  setTimeout(function(){translateRSS();},500);
+}
+var rssTranslated=false;
+async function translateRSS(){
+  if(rssTranslated||!rssItems.length) return;
+  // Translate headlines in batches of 10
+  var toTranslate=rssItems.filter(function(i){return !i.fr;}).slice(0,20);
+  if(!toTranslate.length) return;
+  try{
+    var headlines=toTranslate.map(function(i,idx){return idx+'. '+i.title;}).join('\n');
+    var prompt='Traduis ces titres de news financieres en francais. Garde le sens exact. Reponds UNIQUEMENT avec les traductions numerotees, meme format:\n'+headlines;
+    var raw=await gmFetch(prompt,800);
+    var lines=raw.split('\n');
+    lines.forEach(function(line){
+      var m=line.match(/^(\d+)[.):]\s*(.+)/);
+      if(m){
+        var idx=parseInt(m[1]);
+        if(toTranslate[idx]) toTranslate[idx].fr=m[2].trim();
+      }
+    });
+    rssTranslated=true;
+    renderRSS();
+  }catch(e){}
 }
 function renderRSS(){
   var c=document.getElementById('rss-cont');if(!c)return;
   var items=rssFilter==='all'?rssItems:rssItems.filter(function(i){return i.tag===rssFilter;});
   if(!items.length){c.innerHTML='<div class="rss-loading">Aucune news pour ce filtre</div>';return;}
   var sources=[...new Set(rssItems.map(function(i){return i.source;}))];
-  var header='<div style="padding:6px 12px;background:var(--surf2);border-bottom:1px solid var(--b1);font-size:8px;color:var(--muted);">'+rssItems.length+' news · '+sources.length+' sources · <span style="color:var(--grn);">✓ '+sources.join(', ')+'</span></div>';
+  var hasUntranslated=items.slice(0,20).some(function(i){return !i.fr;});
+  var transBtn=hasUntranslated?'<button onclick="rssTranslated=false;translateRSS();" style="padding:2px 8px;background:var(--accg);border:1px solid var(--acc);color:var(--acc2);font-family:var(--mono);font-size:7px;cursor:pointer;flex-shrink:0;">🇫🇷 FR</button>':'<span style="font-size:8px;color:var(--grn);">🇫🇷 Traduit</span>';
+  var header='<div style="padding:6px 12px;background:var(--surf2);border-bottom:1px solid var(--b1);font-size:8px;color:var(--muted);display:flex;align-items:center;gap:8px;">'+rssItems.length+' news · <span style="color:var(--grn);">'+sources.join(', ')+'</span><span style="margin-left:auto;">'+transBtn+'</span></div>';
   c.innerHTML=header+items.slice(0,60).map(function(item){
-    var hl=xss(item.title);
+    var hl=xss(item.fr||item.title);
+    var origTitle=item.fr?'<div style="font-size:8px;color:var(--muted);margin-top:2px;font-style:italic;">'+xss(item.title)+'</div>':'';
     var ago=item.ago<60?item.ago+'m':Math.round(item.ago/60)+'h';
     var safe=item.title.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,' ');
     return '<div class="rss-item"><div class="rss-src">'+item.short+'</div><div class="rss-body"><div class="rss-source">'+item.source+' - '+ago+'</div><div class="rss-headline">'+hl+'</div></div><div style="display:flex;gap:6px;margin-top:5px;align-items:center;">'+(item.link&&item.link!=='#'?'<a href="'+item.link+'" target="_blank" rel="noopener" style="font-size:8px;color:var(--cyn);text-decoration:none;border:1px solid rgba(6,182,212,.3);padding:3px 7px;">🔗 Lire</a>':'')+'<button class="rss-btn" onclick="sendToDesk(\''+safe+'\')">🧠 Analyser</button></div></div></div>';
@@ -1614,8 +1685,10 @@ async function loadIndices(){
 
 // ── MORNING BRIEFING ──
 var briefingLoaded = false;
+var briefingTs = 0;
 async function loadBriefing(){
-  if(briefingLoaded) return;
+  // Don't reload if generated less than 30 min ago
+  if(briefingLoaded && Date.now()-briefingTs < 1800000) return;
   var wrap = document.getElementById('brief-wrap');
   if(!wrap) return;
 
@@ -1647,6 +1720,7 @@ async function loadBriefing(){
     var data = JSON.parse(ix>=0&&ix2>=0 ? raw.slice(ix,ix2+1) : '{}');
     renderBriefing(data, healthScore, fgScore);
     briefingLoaded = true;
+    briefingTs = Date.now();
   }catch(e){
     wrap.innerHTML = '<div class="brief-loading"><div class="bl-icon">⚠️</div><div class="bl-title">Erreur chargement</div><div class="bl-sub">' + xss(e.message) + '</div><button style="margin-top:10px;padding:8px 16px;background:var(--accg);border:1px solid var(--acc);color:var(--acc2);font-family:var(--mono);font-size:9px;cursor:pointer;" onclick="briefingLoaded=false;loadBriefing()">↺ Reessayer</button></div>';
   }

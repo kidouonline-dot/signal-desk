@@ -713,7 +713,16 @@ function goNav(idx,btn){
   onVC(idx);
 }
 function onVC(idx){
-  if(idx===0) loadBriefing();
+  if(idx===0) // Briefing loads on demand to save AI quota
+// Show generate button immediately
+var bw=document.getElementById('brief-wrap');
+if(bw) bw.innerHTML='<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:40px 20px;text-align:center;">'
+  +'<div style="font-size:48px;">🌅</div>'
+  +'<div style="font-family:Syne,sans-serif;font-size:18px;font-weight:800;color:#fff;">Morning Briefing</div>'
+  +'<div style="font-size:9px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;line-height:1.8;">Donnees live · Groq + OpenRouter IA<br>Analyse marche personnalisee</div>'
+  +'<button onclick="loadBriefing()" style="padding:12px 28px;background:linear-gradient(135deg,var(--acc),var(--acc2));border:none;color:#fff;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;cursor:pointer;text-transform:uppercase;">🚀 GENERER LE BRIEFING</button>'
+  +'<div style="font-size:8px;color:var(--muted);">~5 secondes · Groq IA</div>'
++'</div>';
   if(idx===8){if(!rssItems.length) loadRSS();else renderRSS();}
   if(idx===1) renderSessions('sess0');
   if(idx===2) renderFavs();
@@ -773,9 +782,15 @@ async function getCandles(sym){
 
 async function callAI(url, key, model, prompt, maxTok){
   try{
+    var headers={'Content-Type':'application/json','Authorization':'Bearer '+key};
+    // OpenRouter requires these headers
+    if(url.indexOf('openrouter')>=0){
+      headers['HTTP-Referer']='https://kidouonline-dot.github.io';
+      headers['X-Title']='Signal Desk Pro';
+    }
     var r=await fetch(url,{
       method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      headers:headers,
       body:JSON.stringify({
         model:model,
         messages:[{role:'user',content:prompt}],
@@ -785,11 +800,12 @@ async function callAI(url, key, model, prompt, maxTok){
     });
     if(r.status===429) return {err:429};
     if(r.status===401) return {err:401};
-    if(!r.ok) return {err:r.status};
+    if(!r.ok){console.log('AI error',r.status,model);return {err:r.status};}
     var d=await r.json();
+    if(d.error){console.log('AI error msg:',d.error.message);return {err:d.error.code||500};}
     var txt=d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content;
     return {txt:txt||'{}'};
-  }catch(e){ return {err:0}; }
+  }catch(e){console.log('callAI exception:',e.message);return {err:0};}
 }
 
 async function gmFetch(prompt,maxTok){
@@ -805,10 +821,21 @@ async function gmFetch(prompt,maxTok){
   }
   // Fallback OpenRouter - only if key is set and valid
   if(OR_KEY&&OR_KEY.length>20){
-    var o=await callAI(OR_URL,OR_KEY,'mistralai/mistral-small-3.1-24b-instruct:free',prompt,maxTok);
-    if(o.txt) return o.txt;
-    var o2=await callAI(OR_URL,OR_KEY,'meta-llama/llama-3.3-70b-instruct:free',prompt,maxTok);
-    if(o2.txt) return o2.txt;
+    // Try multiple free models on OpenRouter
+    var orModels=[
+      'mistralai/mistral-7b-instruct:free',
+      'meta-llama/llama-3.2-3b-instruct:free',
+      'google/gemma-3-4b-it:free',
+      'deepseek/deepseek-r1:free'
+    ];
+    for(var mi=0;mi<orModels.length;mi++){
+      var o=await callAI(OR_URL,OR_KEY,orModels[mi],prompt,maxTok);
+      if(o.txt){
+        console.log('OpenRouter OK with:',orModels[mi]);
+        return o.txt;
+      }
+      if(o.err===429) continue; // try next model
+    }
   }
   // If Groq was just rate-limited, wait and retry once
   if(now<=groqQuotaUntil){
@@ -1992,7 +2019,16 @@ setInterval(function(){renderSessions('sess0');renderSessions('sess6');},60000);
 setInterval(loadRSS,300000);
 loadIndices();
 setInterval(loadIndices,60000);
-loadBriefing();
+// Briefing loads on demand to save AI quota
+// Show generate button immediately
+var bw=document.getElementById('brief-wrap');
+if(bw) bw.innerHTML='<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:40px 20px;text-align:center;">'
+  +'<div style="font-size:48px;">🌅</div>'
+  +'<div style="font-family:Syne,sans-serif;font-size:18px;font-weight:800;color:#fff;">Morning Briefing</div>'
+  +'<div style="font-size:9px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;line-height:1.8;">Donnees live · Groq + OpenRouter IA<br>Analyse marche personnalisee</div>'
+  +'<button onclick="loadBriefing()" style="padding:12px 28px;background:linear-gradient(135deg,var(--acc),var(--acc2));border:none;color:#fff;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;cursor:pointer;text-transform:uppercase;">🚀 GENERER LE BRIEFING</button>'
+  +'<div style="font-size:8px;color:var(--muted);">~5 secondes · Groq IA</div>'
++'</div>';
 </script>
 </body>
 </html>

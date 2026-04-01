@@ -11,11 +11,11 @@
 <style>
 :root{--bg:#07090c;--bg2:#0b0e14;--surf:#0f1318;--surf2:#131a22;--b1:#1a2230;--b2:#243040;--txt:#a8bece;--muted:#3d5266;--dim:#1c2a38;--acc:#7c3aed;--acc2:#a855f7;--accg:rgba(124,58,237,0.1);--grn:#10b981;--grn2:#34d399;--red:#ef4444;--red2:#f87171;--yel:#f59e0b;--yel2:#fbbf24;--blu:#3b82f6;--cyn:#06b6d4;--mono:'JetBrains Mono',monospace;--disp:'Syne',sans-serif;--safe:env(safe-area-inset-bottom,0px);}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-html,body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-size:12px;height:100%;overflow:hidden;-webkit-font-smoothing:antialiased;color-scheme:dark;}
-.app{display:flex;flex-direction:column;height:100vh;overflow:hidden;}
-.view{flex:1;overflow:hidden;display:flex;flex-direction:column;background:var(--bg);}
+html,body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-size:12px;height:100%;height:100dvh;overflow:hidden;-webkit-font-smoothing:antialiased;color-scheme:dark;}
+.app{display:flex;flex-direction:column;height:100%;height:100dvh;overflow:hidden;}
+.view{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;background:var(--bg);}
 .view.hidden{display:none!important;}
-.scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:var(--b2) transparent;}
+.scroll{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:var(--b2) transparent;}
 .scroll::-webkit-scrollbar{width:2px;}
 .scroll::-webkit-scrollbar-thumb{background:var(--b2);}
 .up{color:var(--grn);}.dn{color:var(--red);}
@@ -237,7 +237,7 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-siz
 .fav-stat-v{font-size:18px;font-weight:300;color:#fff;}
 .fav-stat-l{font-size:8px;color:var(--muted);text-transform:uppercase;}
 .fav-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:30px;}
-.news-desk{display:flex;flex-direction:column;flex:1;overflow:hidden;background:var(--bg);min-height:0;}
+.news-desk{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;background:var(--bg);}
 .news-iz{padding:10px 12px;background:var(--surf2);border-bottom:1px solid var(--b2);display:flex;flex-direction:column;gap:8px;flex-shrink:0;}
 .news-ta{width:100%;background:var(--bg2);border:1px solid var(--b2);color:#fff!important;font-family:var(--mono);font-size:11px;line-height:1.6;padding:9px 11px;resize:none;outline:none;min-height:68px;max-height:110px;color-scheme:dark;}
 .news-ta:focus{border-color:var(--acc2);}
@@ -247,7 +247,7 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-siz
 .news-sub:disabled{opacity:.4;cursor:not-allowed;}
 .news-clr{padding:10px 12px;background:none;border:1px solid var(--b2);color:var(--muted);font-family:var(--mono);font-size:9px;cursor:pointer;}
 .news-hint{font-size:9px;color:var(--muted);}
-.news-feed{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 12px;display:flex;flex-direction:column;gap:10px;background:var(--bg);min-height:0;}
+.news-feed{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 12px;display:flex;flex-direction:column;gap:10px;background:var(--bg);}
 .msg-user{align-self:flex-end;max-width:90%;background:linear-gradient(135deg,var(--acc),var(--acc2));padding:10px 12px;border-radius:12px 12px 2px 12px;font-size:12px;color:#fff;line-height:1.5;}
 .msg-user-lbl{font-size:8px;font-weight:700;letter-spacing:.14em;opacity:.75;margin-bottom:4px;text-transform:uppercase;}
 .msg-ai{align-self:flex-start;width:100%;background:var(--surf);border:1px solid var(--b2);border-radius:2px 12px 12px 12px;overflow:hidden;}
@@ -349,7 +349,7 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-siz
 .fund-btn{padding:9px 14px;background:linear-gradient(135deg,var(--acc),var(--acc2));border:none;color:#fff;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.1em;cursor:pointer;text-transform:uppercase;}
 .fund-btn:disabled{opacity:.4;cursor:not-allowed;}
 .fund-hint{font-size:9px;color:var(--muted);}
-.fund-feed{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 12px;display:flex;flex-direction:column;gap:12px;background:var(--bg);}
+.fund-feed{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 12px;display:flex;flex-direction:column;gap:12px;background:var(--bg);}
 .fund-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:20px;}
 .fe-icon{font-size:42px;opacity:.15;}
 .fe-title{font-size:12px;color:var(--txt);}
@@ -479,8 +479,8 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-siz
     <button class="tab" onclick="goTab(7,this)">⚙️ Reglages</button>
   </div>
   <!-- V0: MORNING BRIEFING -->
-  <div class="view" id="v0" style="overflow:hidden;display:flex;flex-direction:column;">
-    <div id="brief-wrap" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--bg);">
+  <div class="view" id="v0">
+    <div id="brief-wrap" style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--bg);">
       <div class="brief-loading" id="brief-loading">
         <div class="bl-icon">🌅</div>
         <div class="bl-title">Morning Briefing</div>
@@ -542,7 +542,7 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-siz
       <div class="news-iz">
         <textarea class="news-ta" id="nta" rows="3" placeholder="Colle une news, tweet, headline..."></textarea>
         <div class="news-row"><button class="news-sub" id="nbtn" onclick="doNews()">🧠 ANALYSER L'IMPACT</button><button class="news-clr" onclick="resetNews()">RESET</button></div>
-        <div class="news-hint">💡 Groq IA analyse l'impact sur Forex · Indices · Gold · Crypto</div>
+        <div class="news-hint" id="ai-hint">💡 IA: <span id="ai-name">Groq</span> · Forex · Indices · Gold · Crypto</div>
       </div>
       <div class="news-feed" id="nfeed">
         <div class="news-empty" id="ne-empty">
@@ -605,7 +605,7 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-siz
     <div class="fund-desk">
       <div class="fund-iz">
         <div class="fund-row"><input class="fund-inp" id="finp" placeholder="Ticker : AAPL, TSLA, NVDA..." maxlength="12"><button class="fund-btn" id="fbtn" onclick="doFund()">🔬 ANALYSER</button></div>
-        <div class="fund-hint">💡 18 grands investisseurs via Groq IA — donnees Twelve Data</div>
+        <div class="fund-hint">💡 IA: <span id="ai-name-fund">Groq</span> · 18 investisseurs · Twelve Data</div>
       </div>
       <div class="fund-feed" id="ffeed">
         <div class="fund-empty"><div class="fe-icon">🔬</div><div class="fe-title">Analyse Fondamentale · 18 Agents</div><div class="fe-sub">Damodaran · Graham · Buffett · Munger<br>Lynch · Burry · Druckenmiller + 11 autres</div></div>
@@ -622,7 +622,7 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-siz
       <button class="rfc" onclick="setRssF('crypto',this)">₿ Crypto</button>
       <button class="rfc" onclick="setRssF('stocks',this)">📈 Actions</button>
     </div>
-    <div class="scroll"><div id="rss-cont"><div class="rss-loading">⟳ Chargement flux news...</div></div></div>
+    <div style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;"><div id="rss-cont"><div class="rss-loading">⟳ Chargement flux news...</div></div></div>
   </div>
 
   <div class="view hidden" id="v7">
@@ -808,40 +808,39 @@ async function callAI(url, key, model, prompt, maxTok){
   }catch(e){console.log('callAI exception:',e.message);return {err:0};}
 }
 
+var currentAI='Groq';
 async function gmFetch(prompt,maxTok){
   var now=Date.now();
-  // Try Groq first (unless recently rate-limited)
+  // 1. Try Groq first
   if(now>groqQuotaUntil){
-    var g=await callAI(GROQ_URL,GROQ_KEY,'llama-3.3-70b-versatile',prompt,maxTok);
-    if(g.txt) return g.txt;
+    var g=await callAI(GROQ_URL,GROQ_KEY,'llama-3.3-70b-versatile',prompt,maxTok||1000);
+    if(g.txt){currentAI='Groq';return g.txt;}
     if(g.err===429){
-      groqQuotaUntil=now+60000;
-      console.log('Groq 429 - bascule OpenRouter');
+      groqQuotaUntil=now+90000; // block 90s
+      showAl({type:'sig',imp:'M',icon:'🔄',lbl:'IA SWITCH',title:'Groq sature — OpenRouter actif',detail:'Basculement automatique sur modeles alternatifs'});
     }
   }
-  // Fallback OpenRouter - only if key is set and valid
-  if(OR_KEY&&OR_KEY.length>20){
-    // Try multiple free models on OpenRouter
-    var orModels=[
-      'mistralai/mistral-7b-instruct:free',
-      'meta-llama/llama-3.2-3b-instruct:free',
-      'google/gemma-3-4b-it:free',
-      'deepseek/deepseek-r1:free'
-    ];
-    for(var mi=0;mi<orModels.length;mi++){
-      var o=await callAI(OR_URL,OR_KEY,orModels[mi],prompt,maxTok);
-      if(o.txt){
-        console.log('OpenRouter OK with:',orModels[mi]);
-        return o.txt;
-      }
-      if(o.err===429) continue; // try next model
+  // 2. Fallback: OpenRouter with multiple free models
+  var orModels=[
+    'meta-llama/llama-3.3-70b-instruct:free',
+    'mistralai/mistral-7b-instruct:free',
+    'microsoft/phi-3-mini-128k-instruct:free',
+    'google/gemma-3-4b-it:free'
+  ];
+  for(var mi=0;mi<orModels.length;mi++){
+    var o=await callAI(OR_URL,OR_KEY,orModels[mi],prompt,maxTok||1000);
+    if(o.txt){
+      currentAI='OpenRouter ('+orModels[mi].split('/')[1]+')';
+      return o.txt;
     }
   }
-  // If Groq was just rate-limited, wait and retry once
-  if(now<=groqQuotaUntil){
-    throw new Error('Quota Groq atteint — attendez 1 minute puis reessayez');
+  // 3. Retry Groq once after waiting
+  if(now>groqQuotaUntil-80000){
+    await new Promise(function(r){setTimeout(r,3000);});
+    var g2=await callAI(GROQ_URL,GROQ_KEY,'llama-3.3-70b-versatile',prompt,maxTok||1000);
+    if(g2.txt){currentAI='Groq (retry)';return g2.txt;}
   }
-  throw new Error('Service IA indisponible — reessayez dans quelques secondes');
+  throw new Error('Services IA indisponibles. Reessayez dans 1 minute.');
 }
 
 function ema(p,n){
@@ -1229,6 +1228,7 @@ function resetNews(){
 async function doNews(){
   var ta=document.getElementById('nta'),text=ta.value.trim();if(!text)return;
   var btn=document.getElementById('nbtn');btn.disabled=true;btn.textContent='Analyse...';
+  var ain=document.getElementById('ai-name');if(ain)ain.textContent='...';
   var feed=document.getElementById('nfeed');
   var ne=document.getElementById('ne-empty');if(ne)ne.remove();
   var now=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
@@ -1252,6 +1252,7 @@ async function doNews(){
     feed.appendChild(err);
   }
   feed.scrollTop=feed.scrollHeight;btn.disabled=false;btn.textContent="🧠 ANALYSER L'IMPACT";
+  var ain=document.getElementById('ai-name');if(ain)ain.textContent=currentAI;
 }
 function buildAIBubble(data,time){
   var b=document.createElement('div');b.className='msg-ai';
@@ -1345,6 +1346,8 @@ async function loadRSS(){
 var rssTranslated=false;
 async function translateRSS(){
   if(rssTranslated||!rssItems.length) return;
+  var transBtn=document.querySelector('[onclick*="translateRSS"]');
+  if(transBtn) transBtn.textContent='⟳ Traduction...';
   // Translate headlines in batches of 10
   var toTranslate=rssItems.filter(function(i){return !i.fr;}).slice(0,20);
   if(!toTranslate.length) return;
@@ -1361,6 +1364,7 @@ async function translateRSS(){
       }
     });
     rssTranslated=true;
+    console.log('RSS translated via', currentAI);
     renderRSS();
   }catch(e){}
 }
@@ -1557,6 +1561,7 @@ var AGENTS=[
 async function doFund(){
   var inp=document.getElementById('finp'),ticker=inp.value.trim().toUpperCase();if(!ticker)return;
   var btn=document.getElementById('fbtn');btn.disabled=true;btn.textContent='Analyse...';
+  var ainf=document.getElementById('ai-name-fund');if(ainf)ainf.textContent='...';
   var feed=document.getElementById('ffeed');feed.innerHTML='';
   var prog=document.createElement('div');prog.className='fund-progress';prog.id='fprog';
   var chips=AGENTS.map(function(a){return '<span class="fp-agent" id="fpa-'+a.id+'">'+a.emoji+' '+a.name+'</span>';}).join('');
@@ -1593,6 +1598,7 @@ async function doFund(){
     feed.appendChild(err);
   }
   btn.disabled=false;btn.textContent='🔬 ANALYSER';
+  var ainf=document.getElementById('ai-name-fund');if(ainf)ainf.textContent=currentAI;
 }
 function buildFundReport(d,fb){
   var wrap=document.createElement('div');wrap.className='fund-report';
@@ -1726,7 +1732,7 @@ async function loadBriefing(){
   if(briefingLoaded && Date.now()-briefingTs < 1800000) return;
   var wrap = document.getElementById('brief-wrap');
   if(!wrap) return;
-  wrap.innerHTML = '<div class="brief-loading"><div class="bl-icon">🌅</div><div class="bl-title">Morning Briefing</div><div class="bl-sub">Chargement donnees marche...<br>Groq IA · Live</div><div class="bl-prog"><div class="bl-fill"></div></div></div>';
+  wrap.innerHTML = '<div class="brief-loading"><div class="bl-icon">🌅</div><div class="bl-title">Morning Briefing</div><div class="bl-sub">Chargement donnees marche...<br><span id="ai-name-brief">Groq</span> · Live</div><div class="bl-prog"><div class="bl-fill"></div></div></div>';
 
   // Fetch real market data first
   var fgScore=50, fgLabel='Neutre';
@@ -1768,7 +1774,7 @@ async function loadBriefing(){
     var raw=await gmFetch(prompt,2500);
     var ix=raw.indexOf('{'),ix2=raw.lastIndexOf('}');
     var data=JSON.parse(ix>=0&&ix2>=0?raw.slice(ix,ix2+1):'{}');
-    renderBriefing(data,fgScore,mktData);
+    renderBriefing(data,fgScore,mktData,currentAI);
     briefingLoaded=true;
     briefingTs=Date.now();
   }catch(e){
@@ -1781,7 +1787,7 @@ async function loadBriefing(){
   }
 }
 
-function renderBriefing(d, fgScore, mktData){
+function renderBriefing(d, fgScore, mktData, aiName){
   var wrap=document.getElementById('brief-wrap');if(!wrap)return;
   var now=new Date();
   var h=now.getHours();
@@ -1910,7 +1916,7 @@ function renderBriefing(d, fgScore, mktData){
   if(levelsHTML) html+='<div style="margin:8px 12px 0;"><div style="padding:7px 0 5px;font-size:8px;font-weight:700;letter-spacing:.18em;color:var(--acc2);text-transform:uppercase;">🎯 NIVEAUX CLES</div></div>'
     +'<div style="background:var(--surf);border:1px solid var(--b2);margin:0 12px;">'+levelsHTML+'</div>';
   // Disclaimer
-  html+='<div style="padding:12px 14px;font-size:8px;color:var(--muted);text-align:center;line-height:1.5;">Analyse IA avec donnees Twelve Data · Informatif uniquement</div>';
+  html+='<div style="padding:12px 14px;font-size:8px;color:var(--muted);text-align:center;line-height:1.5;">Analyse via <span style="color:var(--acc2);">'+(aiName||'Groq')+'</span> · Donnees Twelve Data · Informatif uniquement</div>';
 
   wrap.innerHTML=html;
 }

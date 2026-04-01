@@ -479,12 +479,12 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-siz
     <button class="tab" onclick="goTab(7,this)">⚙️ Reglages</button>
   </div>
   <!-- V0: MORNING BRIEFING -->
-  <div class="view" id="v0">
-    <div class="brief-wrap" id="brief-wrap">
+  <div class="view" id="v0" style="overflow:hidden;display:flex;flex-direction:column;">
+    <div id="brief-wrap" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--bg);">
       <div class="brief-loading" id="brief-loading">
         <div class="bl-icon">🌅</div>
         <div class="bl-title">Morning Briefing</div>
-        <div class="bl-sub">Analyse des marches en cours...<br>Groq IA · Donnees live</div>
+        <div class="bl-sub">Chargement donnees marche...<br>Groq IA · Live</div>
         <div class="bl-prog"><div class="bl-fill"></div></div>
       </div>
     </div>
@@ -660,7 +660,7 @@ var TD_KEY='27be7dbb09744774a1a9003abb9a6d7e';
 var TD_BASE='https://api.twelvedata.com';
 var GROQ_KEY='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';
 var GROQ_URL='https://api.groq.com/openai/v1/chat/completions';
-var OR_KEY='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';
+var OR_KEY='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';
 var OR_URL='https://openrouter.ai/api/v1/chat/completions';
 var groqQuotaUntil=0; // timestamp until which Groq is rate-limited
 var DN=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
@@ -772,21 +772,24 @@ async function getCandles(sym){
 }
 
 async function callAI(url, key, model, prompt, maxTok){
-  var r=await fetch(url,{
-    method:'POST',
-    headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-    body:JSON.stringify({
-      model:model,
-      messages:[{role:'user',content:prompt}],
-      temperature:0.2,
-      max_tokens:maxTok||1000
-    })
-  });
-  if(r.status===429) return {err:429};
-  if(!r.ok) return {err:r.status};
-  var d=await r.json();
-  var txt=d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content;
-  return {txt:txt||'{}'};
+  try{
+    var r=await fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body:JSON.stringify({
+        model:model,
+        messages:[{role:'user',content:prompt}],
+        temperature:0.2,
+        max_tokens:maxTok||1000
+      })
+    });
+    if(r.status===429) return {err:429};
+    if(r.status===401) return {err:401};
+    if(!r.ok) return {err:r.status};
+    var d=await r.json();
+    var txt=d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content;
+    return {txt:txt||'{}'};
+  }catch(e){ return {err:0}; }
 }
 
 async function gmFetch(prompt,maxTok){
@@ -796,17 +799,22 @@ async function gmFetch(prompt,maxTok){
     var g=await callAI(GROQ_URL,GROQ_KEY,'llama-3.3-70b-versatile',prompt,maxTok);
     if(g.txt) return g.txt;
     if(g.err===429){
-      groqQuotaUntil=now+60000; // block Groq for 60s
-      showAl({type:'sig',imp:'M',icon:'⚡',lbl:'GROQ QUOTA',title:'Basculement sur OpenRouter',detail:'Groq sature — OpenRouter actif'});
+      groqQuotaUntil=now+60000;
+      console.log('Groq 429 - bascule OpenRouter');
     }
   }
-  // Fallback: OpenRouter with Mistral
-  var o=await callAI(OR_URL,OR_KEY,'mistralai/mistral-7b-instruct:free',prompt,maxTok);
-  if(o.txt) return o.txt;
-  // Last resort: OpenRouter with Llama
-  var o2=await callAI(OR_URL,OR_KEY,'meta-llama/llama-3.1-8b-instruct:free',prompt,maxTok);
-  if(o2.txt) return o2.txt;
-  throw new Error('Tous les services IA sont indisponibles - reessayez dans 1 minute');
+  // Fallback OpenRouter - only if key is set and valid
+  if(OR_KEY&&OR_KEY.length>20){
+    var o=await callAI(OR_URL,OR_KEY,'mistralai/mistral-small-3.1-24b-instruct:free',prompt,maxTok);
+    if(o.txt) return o.txt;
+    var o2=await callAI(OR_URL,OR_KEY,'meta-llama/llama-3.3-70b-instruct:free',prompt,maxTok);
+    if(o2.txt) return o2.txt;
+  }
+  // If Groq was just rate-limited, wait and retry once
+  if(now<=groqQuotaUntil){
+    throw new Error('Quota Groq atteint — attendez 1 minute puis reessayez');
+  }
+  throw new Error('Service IA indisponible — reessayez dans quelques secondes');
 }
 
 function ema(p,n){
@@ -1686,99 +1694,198 @@ async function loadIndices(){
 // ── MORNING BRIEFING ──
 var briefingLoaded = false;
 var briefingTs = 0;
+
 async function loadBriefing(){
-  // Don't reload if generated less than 30 min ago
   if(briefingLoaded && Date.now()-briefingTs < 1800000) return;
   var wrap = document.getElementById('brief-wrap');
   if(!wrap) return;
+  wrap.innerHTML = '<div class="brief-loading"><div class="bl-icon">🌅</div><div class="bl-title">Morning Briefing</div><div class="bl-sub">Chargement donnees marche...<br>Groq IA · Live</div><div class="bl-prog"><div class="bl-fill"></div></div></div>';
 
-  // Show loading state
-  wrap.innerHTML = '<div class="brief-loading"><div class="bl-icon">🌅</div><div class="bl-title">Morning Briefing</div><div class="bl-sub">Analyse des marches en cours...<br>Groq IA · Donnees live</div><div class="bl-prog"><div class="bl-fill"></div></div></div>';
-
-  // Get Fear & Greed for health score
-  var fgScore = 50;
+  // Fetch real market data first
+  var fgScore=50, fgLabel='Neutre';
+  var mktData={spx:'—',spxChg:0,btc:'—',btcChg:0,gold:'—',goldChg:0,eurusd:'—',eurusdChg:0};
   try{
-    var fgR = await fetch('https://api.alternative.me/fng/?limit=1&format=json');
-    var fgD = await fgR.json();
-    if(fgD&&fgD.data&&fgD.data[0]) fgScore = parseInt(fgD.data[0].value);
+    var fgR=await fetch('https://api.alternative.me/fng/?limit=1&format=json');
+    var fgD=await fgR.json();
+    if(fgD&&fgD.data&&fgD.data[0]){fgScore=parseInt(fgD.data[0].value);fgLabel=fgD.data[0].value_classification;}
+  }catch(e){}
+  try{
+    var qSpx=await getQuote('SPX'); if(qSpx){mktData.spx=Math.round(qSpx.c).toLocaleString('fr-FR');mktData.spxChg=qSpx.dp;}
+    var qBtc=await getQuote('BTC/USD'); if(qBtc){mktData.btc=Math.round(qBtc.c).toLocaleString('fr-FR');mktData.btcChg=qBtc.dp;}
+    var qGold=await getQuote('XAU/USD'); if(qGold){mktData.gold=qGold.c.toFixed(0);mktData.goldChg=qGold.dp;}
+    var qEur=await getQuote('EUR/USD'); if(qEur){mktData.eurusd=qEur.c.toFixed(4);mktData.eurusdChg=qEur.dp;}
   }catch(e){}
 
-  // Build health score (composite)
-  var now = new Date();
-  var utcH = now.getUTCHours() + now.getUTCMinutes()/60;
-  var sessOpen = (utcH>=8&&utcH<22) ? 20 : 0; // London or NY open
-  var healthScore = Math.round(fgScore * 0.6 + sessOpen + 20);
-  healthScore = Math.min(Math.max(healthScore, 5), 95);
+  var now=new Date();
+  var today=now.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  var h=now.getHours();
 
-  // Generate briefing via Groq
-  var today = now.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-  var prompt = 'Tu es un analyste financier senior. Genere un morning briefing des marches financiers pour ' + today + '. Reponds UNIQUEMENT en JSON valide sans markdown. Format: {"greeting":"Bon [matin/apres-midi/soir] [prenom optionnel]","marketMood":"Risque ON/OFF/NEUTRE","moodScore":72,"moodDesc":"2 phrases sur le sentiment global du marche aujourd hui","news":[{"icon":"📊","title":"titre actu courte","summary":"1 phrase impact marche","sentiment":"bull","tag":"MACRO"},{"icon":"🌍","title":"...","summary":"...","sentiment":"bear","tag":"GEO"},{"icon":"💱","title":"...","summary":"...","sentiment":"bull","tag":"FOREX"},{"icon":"📈","title":"...","summary":"...","sentiment":"neutral","tag":"EQUITIES"},{"icon":"₿","title":"...","summary":"...","sentiment":"bull","tag":"CRYPTO"}],"forex":{"bias":"USD haussier","reason":"1 phrase","pairs":[{"pair":"EUR/USD","bias":"baissier","level":"1.0820"},{"pair":"GBP/USD","bias":"haussier","level":"1.2650"},{"pair":"USD/JPY","bias":"neutre","level":"151.20"}]},"tradeIdea":{"setup":"LONG EUR/USD","asset":"EUR/USD","direction":"LONG","entry":"1.0830","stop":"1.0780","target":"1.0950","ratio":"2.4:1","rationale":"2-3 phrases justifiant le setup avec confluences techniques et fondamentales","confidence":68},"disclaimer":"Analyse informative uniquement."}';
+  var prompt='Tu es un analyste financier senior buy-side. Genere un morning briefing PRECIS et CONCRET pour ' + today + '.'
+    +' Donnees marche REELLES a utiliser: SPX='+mktData.spx+' ('+( mktData.spxChg>=0?'+':'')+mktData.spxChg.toFixed(2)+'%)'
+    +', BTC='+mktData.btc+' ('+(mktData.btcChg>=0?'+':'')+mktData.btcChg.toFixed(2)+'%)'
+    +', Gold='+mktData.gold+' ('+(mktData.goldChg>=0?'+':'')+mktData.goldChg.toFixed(2)+'%)'
+    +', EUR/USD='+mktData.eurusd+' ('+(mktData.eurusdChg>=0?'+':'')+mktData.eurusdChg.toFixed(2)+'%)'
+    +', Fear&Greed='+fgScore+'/100 ('+fgLabel+').'
+    +' Utilise ces chiffres reels. Analyse les catalyseurs macro du jour (tarifs douaniers Trump, BCE/Fed, donnees eco, geopolitique).'
+    +' Reponds UNIQUEMENT en JSON valide sans markdown ni backticks.'
+    +' Format: {"moodScore":'+Math.round(fgScore*0.7+30)+',"moodLabel":"RISK ON|RISK OFF|NEUTRE|RISK OFF FORT"'
+    +',"moodDesc":"2 phrases precises sur le sentiment avec references aux donnees reelles"'
+    +',"news":[{"icon":"📊","title":"titre court precis","summary":"1 phrase avec chiffres","sentiment":"bull|bear|neutral","tag":"MACRO|GEO|FOREX|EQUITIES|CRYPTO"}]'
+    +' 5 news obligatoires differentes'
+    +',"forex":{"bias":"biais directionnel precis","reason":"raison macro","pairs":[{"pair":"EUR/USD","bias":"haussier|baissier|neutre","level":"'+mktData.eurusd+'","target":"niveau cible"},{"pair":"GBP/USD","bias":"...","level":"...","target":"..."},{"pair":"USD/JPY","bias":"...","level":"...","target":"..."}]}'
+    +',"tradeIdea":{"setup":"LONG/SHORT ACTIF","asset":"actif","direction":"LONG|SHORT","timeframe":"1D|4H|1H","entry":"niveau","stop":"niveau","target":"niveau","ratio":"X:1","rationale":"2 phrases avec confluences techniques ET fondamentales precises","confidence":65}'
+    +',"keyLevels":[{"asset":"SPX","level":"'+mktData.spx+'","type":"support|resistance","note":"1 phrase"},{"asset":"BTC","level":"'+mktData.btc+'","type":"...","note":"..."}]'
+    +'}';
 
   try{
-    var raw = await gmFetch(prompt, 2000);
-    var ix = raw.indexOf('{'), ix2 = raw.lastIndexOf('}');
-    var data = JSON.parse(ix>=0&&ix2>=0 ? raw.slice(ix,ix2+1) : '{}');
-    renderBriefing(data, healthScore, fgScore);
-    briefingLoaded = true;
-    briefingTs = Date.now();
+    var raw=await gmFetch(prompt,2500);
+    var ix=raw.indexOf('{'),ix2=raw.lastIndexOf('}');
+    var data=JSON.parse(ix>=0&&ix2>=0?raw.slice(ix,ix2+1):'{}');
+    renderBriefing(data,fgScore,mktData);
+    briefingLoaded=true;
+    briefingTs=Date.now();
   }catch(e){
-    wrap.innerHTML = '<div class="brief-loading"><div class="bl-icon">⚠️</div><div class="bl-title">Erreur chargement</div><div class="bl-sub">' + xss(e.message) + '</div><button style="margin-top:10px;padding:8px 16px;background:var(--accg);border:1px solid var(--acc);color:var(--acc2);font-family:var(--mono);font-size:9px;cursor:pointer;" onclick="briefingLoaded=false;loadBriefing()">↺ Reessayer</button></div>';
+    wrap.innerHTML='<div style="padding:30px 14px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px;">'
+      +'<div style="font-size:32px;">⚠️</div>'
+      +'<div style="font-size:12px;color:#fff;">Service IA indisponible</div>'
+      +'<div style="font-size:9px;color:var(--muted);line-height:1.6;">'+xss(e.message)+'</div>'
+      +'<button style="padding:8px 18px;background:var(--accg);border:1px solid var(--acc);color:var(--acc2);font-family:var(--mono);font-size:9px;cursor:pointer;letter-spacing:.08em;" onclick="briefingLoaded=false;loadBriefing()">↺ REESSAYER</button>'
+      +'</div>';
   }
 }
 
-function renderBriefing(d, healthScore, fgScore){
-  var wrap = document.getElementById('brief-wrap');
-  if(!wrap) return;
-  var now = new Date();
-  var h = now.getHours();
-  var greet = h<12 ? '🌅 Bonjour' : h<18 ? '☀️ Bon apres-midi' : '🌙 Bonsoir';
-  var today = now.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
-  var moodScore = d.moodScore || healthScore;
-  var moodCol = moodScore>=65 ? '#10b981' : moodScore>=45 ? '#f59e0b' : '#ef4444';
-  var moodLabel = moodScore>=70 ? 'RISK ON' : moodScore>=55 ? 'MODEREMENT HAUSSIER' : moodScore>=45 ? 'NEUTRE' : moodScore>=30 ? 'RISK OFF' : 'RISK OFF FORT';
+function renderBriefing(d, fgScore, mktData){
+  var wrap=document.getElementById('brief-wrap');if(!wrap)return;
+  var now=new Date();
+  var h=now.getHours();
+  var greet=h<12?'🌅 Bonjour':h<18?'☀️ Bon apres-midi':'🌙 Bonsoir';
+  var today=now.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
+  var moodScore=d.moodScore||fgScore||50;
+  var moodCol=moodScore>=65?'#10b981':moodScore>=45?'#f59e0b':'#ef4444';
+  var moodLabel=d.moodLabel||( moodScore>=70?'RISK ON':moodScore>=55?'MODEREMENT HAUSSIER':moodScore>=45?'NEUTRE':moodScore>=30?'RISK OFF':'RISK OFF FORT');
 
-  // SVG gauge
-  var R=34, C=2*Math.PI*R, off=C-(moodScore/100)*C;
-  var gaugeHTML = '<svg width="88" height="88"><circle cx="44" cy="44" r="'+R+'" fill="none" stroke="#1c2a38" stroke-width="7"/><circle cx="44" cy="44" r="'+R+'" fill="none" stroke="'+moodCol+'" stroke-width="7" stroke-dasharray="'+C+'" stroke-dashoffset="'+off+'" stroke-linecap="round" transform="rotate(-90 44 44)"/></svg>';
+  // Gauge SVG
+  var R=32,C=2*Math.PI*R,off=C-(moodScore/100)*C;
+  var gauge='<svg width="84" height="84" style="flex-shrink:0"><circle cx="42" cy="42" r="'+R+'" fill="none" stroke="#1c2a38" stroke-width="8"/><circle cx="42" cy="42" r="'+R+'" fill="none" stroke="'+moodCol+'" stroke-width="8" stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" stroke-linecap="round" transform="rotate(-90 42 42)" style="transition:stroke-dashoffset 1s ease"/><text x="42" y="38" text-anchor="middle" font-family="Syne" font-size="18" font-weight="800" fill="'+moodCol+'">'+moodScore+'</text><text x="42" y="52" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#3d5266">/100</text></svg>';
 
-  var newsHTML = (d.news||[]).map(function(n){
-    var sc = n.sentiment==='bull'?'bull':n.sentiment==='bear'?'bear':n.sentiment==='warn'?'warn':'neutral';
-    var tagLbl = n.tag||'NEWS';
-    return '<div class="brief-item"><div class="brief-item-ico">'+n.icon+'</div><div class="brief-item-body"><div class="brief-item-title">'+xss(n.title)+'</div><div class="brief-item-sub">'+xss(n.summary)+'</div><span class="brief-item-tag '+sc+'">'+tagLbl+'</span></div></div>';
-  }).join('');
+  // Market snapshot bar
+  function chgSpan(v){var up=v>=0;return '<span style="color:'+(up?'#10b981':'#ef4444');'font-size:9px;">'+(up?'▲':'▼')+Math.abs(v).toFixed(2)+'%</span>';}
+  var snap='<div style="display:flex;gap:0;border-bottom:1px solid var(--b1);flex-shrink:0;">'
+    +[['SPX',mktData.spx,mktData.spxChg],['BTC',mktData.btc,mktData.btcChg],['Gold',mktData.gold,mktData.goldChg],['EUR/USD',mktData.eurusd,mktData.eurusdChg]].map(function(a){
+      var up=a[2]>=0;
+      return '<div style="flex:1;padding:7px 8px;border-right:1px solid var(--b1);text-align:center;">'
+        +'<div style="font-size:8px;color:var(--muted);margin-bottom:2px;">'+a[0]+'</div>'
+        +'<div style="font-size:11px;font-weight:600;color:#fff;">'+a[1]+'</div>'
+        +'<div style="font-size:8px;color:'+(up?'#10b981':'#ef4444')+';margin-top:1px;">'+(up?'▲':'▼')+Math.abs(a[2]).toFixed(2)+'%</div>'
+        +'</div>';
+    }).join('')
+    +'</div>';
 
-  var fxPairs = (d.forex&&d.forex.pairs||[]).map(function(p){
-    var sc2 = p.bias&&p.bias.indexOf('bais')>=0?'bear':p.bias&&p.bias.indexOf('haus')>=0?'bull':'neutral';
-    var arrow = sc2==='bull'?'↑':sc2==='bear'?'↓':'→';
-    return '<div class="brief-item"><div class="brief-item-ico" style="font-size:10px;color:var(--muted);">'+arrow+'</div><div class="brief-item-body"><div class="brief-item-title" style="font-size:10px;">'+xss(p.pair)+'</div><div class="brief-item-sub">'+xss(p.bias)+' · '+xss(p.level)+'</div></div></div>';
-  }).join('');
-
-  var td = d.tradeIdea||{};
-  var tdDir = td.direction==='LONG'?'bull':'bear';
-  var tradeHTML = td.setup ? '<div class="brief-trade"><div class="brief-trade-hdr"><span style="font-size:16px;">'+(td.direction==='LONG'?'📈':'📉')+'</span><span class="brief-trade-lbl">Trade Idea du Jour</span><span style="font-size:9px;font-weight:700;color:'+(td.direction==='LONG'?'var(--grn)':'var(--red)')+'">'+td.confidence+'% conviction</span></div><div class="brief-trade-body"><div class="brief-trade-setup" style="color:'+(td.direction==='LONG'?'var(--grn)':'var(--red)')+'">'+xss(td.setup)+'</div><div class="brief-trade-detail">'+xss(td.rationale)+'</div><div class="brief-trade-levels"><div class="btl"><div class="btl-l">Entry</div><div class="btl-v entry">'+xss(td.entry)+'</div></div><div class="btl"><div class="btl-l">Stop</div><div class="btl-v stop">'+xss(td.stop)+'</div></div><div class="btl"><div class="btl-l">Target</div><div class="btl-v tgt">'+xss(td.target)+'</div></div><div class="btl"><div class="btl-l">R:R</div><div class="btl-v entry">'+xss(td.ratio||'—')+'</div></div></div></div></div>' : '';
-
-  wrap.innerHTML =
-    '<div class="brief-hero">'
-      +'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;">'
-        +'<div><div class="brief-greeting">'+greet+'</div><div class="brief-date">'+today+'</div></div>'
-        +'<button class="brief-refresh" onclick="briefingLoaded=false;loadBriefing()">↺ Refresh</button>'
+  // News cards
+  var newsHTML=(d.news||[]).map(function(n){
+    var sc=n.sentiment==='bull'?'#10b981':n.sentiment==='bear'?'#ef4444':'#3d5266';
+    var bc=n.sentiment==='bull'?'rgba(16,185,129,.08)':n.sentiment==='bear'?'rgba(239,68,68,.08)':'transparent';
+    return '<div style="display:flex;gap:10px;padding:10px 13px;border-bottom:1px solid rgba(26,34,48,.6);background:'+bc+'">'
+      +'<span style="font-size:18px;flex-shrink:0;line-height:1.3;">'+( n.icon||'📌')+'</span>'
+      +'<div style="flex:1;">'
+        +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">'
+          +'<span style="font-size:7px;font-weight:700;letter-spacing:.12em;padding:1px 5px;border:1px solid '+sc+';color:'+sc+';">'+( n.tag||'NEWS')+'</span>'
+        +'</div>'
+        +'<div style="font-size:11px;color:#fff;font-weight:500;line-height:1.4;margin-bottom:3px;">'+xss(n.title)+'</div>'
+        +'<div style="font-size:9px;color:var(--muted);line-height:1.5;">'+xss(n.summary)+'</div>'
       +'</div>'
-      +'<div class="brief-health">'
-        +'<div class="bh-gauge">'+gaugeHTML+'<div class="bh-score"><div class="bh-sv" style="color:'+moodCol+'">'+moodScore+'</div><div class="bh-sl">/100</div></div></div>'
-        +'<div class="bh-info">'
-          +'<div class="bh-label" style="color:'+moodCol+'">'+moodLabel+'</div>'
-          +'<div class="bh-desc">'+(d.moodDesc||'Analyse du sentiment global des marches')+'</div>'
-          +'<div class="bh-bars">'
-            +'<div class="bh-bar"><div class="bh-bar-track"><div class="bh-bar-fill" style="width:'+fgScore+'%;background:'+moodCol+'"></div></div><div class="bh-bar-lbl">F&G '+fgScore+'</div></div>'
-            +'<div class="bh-bar"><div class="bh-bar-track"><div class="bh-bar-fill" style="width:'+moodScore+'%;background:var(--acc2)"></div></div><div class="bh-bar-lbl">MOOD</div></div>'
-          +'</div>'
+    +'</div>';
+  }).join('');
+
+  // Forex pairs
+  var fxHTML=(d.forex&&d.forex.pairs||[]).map(function(p){
+    var up=p.bias&&p.bias.indexOf('haus')>=0;
+    var dn=p.bias&&p.bias.indexOf('bais')>=0;
+    var col=up?'#10b981':dn?'#ef4444':'#3d5266';
+    var arrow=up?'↑':dn?'↓':'→';
+    return '<div style="display:flex;align-items:center;padding:8px 13px;border-bottom:1px solid rgba(26,34,48,.5);">'
+      +'<span style="font-size:18px;margin-right:8px;color:'+col+';">'+arrow+'</span>'
+      +'<div style="flex:1;">'
+        +'<div style="font-size:11px;font-weight:600;color:#fff;">'+xss(p.pair)+'</div>'
+        +'<div style="font-size:9px;color:var(--muted);">'+xss(p.bias)+(p.target?' → '+xss(p.target):'')+'</div>'
+      +'</div>'
+      +'<div style="text-align:right;">'
+        +'<div style="font-size:11px;color:'+col+';">'+xss(p.level)+'</div>'
+      +'</div>'
+    +'</div>';
+  }).join('');
+
+  // Trade idea
+  var td=d.tradeIdea||{};
+  var tdCol=td.direction==='LONG'?'#10b981':'#ef4444';
+  var tradeHTML=td.setup?'<div style="margin:10px 12px;background:linear-gradient(135deg,rgba(124,58,237,.12),rgba(168,85,247,.04));border:1px solid rgba(168,85,247,.25);">'
+    +'<div style="padding:9px 12px;border-bottom:1px solid rgba(168,85,247,.2);display:flex;align-items:center;gap:8px;">'
+      +'<span style="font-size:16px;">'+(td.direction==='LONG'?'📈':'📉')+'</span>'
+      +'<span style="font-size:8px;font-weight:700;letter-spacing:.18em;color:var(--acc2);text-transform:uppercase;">Trade Idea</span>'
+      +(td.timeframe?'<span style="font-size:8px;padding:1px 6px;border:1px solid var(--b2);color:var(--muted);margin-left:auto;">'+td.timeframe+'</span>':'')
+    +'</div>'
+    +'<div style="padding:10px 12px;">'
+      +'<div style="font-family:Syne,sans-serif;font-size:18px;font-weight:800;color:'+tdCol+';margin-bottom:5px;">'+xss(td.direction)+' '+xss(td.asset)+'</div>'
+      +'<div style="font-size:9px;color:var(--txt);line-height:1.6;margin-bottom:8px;">'+xss(td.rationale)+'</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;">'
+        +'<div style="background:var(--bg2);padding:6px 7px;"><div style="font-size:7px;color:var(--muted);margin-bottom:2px;">ENTRY</div><div style="font-size:11px;font-weight:600;color:#fff;">'+xss(td.entry)+'</div></div>'
+        +'<div style="background:var(--bg2);padding:6px 7px;"><div style="font-size:7px;color:var(--muted);margin-bottom:2px;">STOP</div><div style="font-size:11px;font-weight:600;color:#ef4444;">'+xss(td.stop)+'</div></div>'
+        +'<div style="background:var(--bg2);padding:6px 7px;"><div style="font-size:7px;color:var(--muted);margin-bottom:2px;">TARGET</div><div style="font-size:11px;font-weight:600;color:#10b981;">'+xss(td.target)+'</div></div>'
+        +'<div style="background:var(--bg2);padding:6px 7px;"><div style="font-size:7px;color:var(--muted);margin-bottom:2px;">R:R</div><div style="font-size:11px;font-weight:600;color:#fff;">'+xss(td.ratio||'—')+'</div></div>'
+      +'</div>'
+      +(td.confidence?'<div style="margin-top:7px;height:3px;background:var(--dim);"><div style="height:100%;width:'+td.confidence+'%;background:'+tdCol+';transition:width .8s;"></div></div><div style="font-size:8px;color:var(--muted);margin-top:3px;">Conviction '+td.confidence+'%</div>':'')
+    +'</div>'
+  +'</div>':'';
+
+  // Key levels
+  var levelsHTML=(d.keyLevels||[]).map(function(kl){
+    var isRes=kl.type==='resistance';
+    return '<div style="display:flex;align-items:center;padding:7px 13px;border-bottom:1px solid rgba(26,34,48,.4);">'
+      +'<div style="flex:1;font-size:10px;color:#fff;">'+xss(kl.asset)+'</div>'
+      +'<div style="font-size:10px;font-weight:600;color:'+(isRes?'#ef4444':'#10b981')+';">'+xss(kl.level)+'</div>'
+      +'<div style="margin-left:8px;font-size:7px;padding:1px 5px;border:1px solid '+(isRes?'rgba(239,68,68,.3)':'rgba(16,185,129,.3)')+';color:'+(isRes?'#ef4444':'#10b981')+';">'+xss(kl.type)+'</div>'
+    +'</div>';
+  }).join('');
+
+  var html='';
+  // Header
+  html+='<div style="padding:12px 14px 10px;background:linear-gradient(135deg,rgba(124,58,237,.1),rgba(168,85,247,.03));border-bottom:1px solid var(--b2);">'
+    +'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;">'
+      +'<div><div style="font-family:Syne,sans-serif;font-size:20px;font-weight:800;color:#fff;">'+greet+'</div>'
+        +'<div style="font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-top:1px;">'+today+'</div></div>'
+      +'<button style="background:none;border:1px solid var(--b2);color:var(--muted);font-family:var(--mono);font-size:8px;padding:4px 9px;cursor:pointer;" onclick="briefingLoaded=false;loadBriefing()">↺ Refresh</button>'
+    +'</div>'
+    +'<div style="display:flex;align-items:center;gap:12px;">'
+      +gauge
+      +'<div style="flex:1;">'
+        +'<div style="font-family:Syne,sans-serif;font-size:15px;font-weight:800;color:'+moodCol+';margin-bottom:4px;">'+moodLabel+'</div>'
+        +'<div style="font-size:9px;color:var(--muted);line-height:1.5;">'+xss(d.moodDesc||'Analyse du sentiment global')+'</div>'
+        +'<div style="display:flex;gap:6px;margin-top:6px;">'
+          +'<div style="flex:1;"><div style="height:3px;background:var(--dim);"><div style="height:100%;width:'+fgScore+'%;background:'+moodCol+'"></div></div><div style="font-size:7px;color:var(--muted);margin-top:2px;">F&G '+fgScore+'</div></div>'
+          +'<div style="flex:1;"><div style="height:3px;background:var(--dim);"><div style="height:100%;width:'+moodScore+'%;background:var(--acc2)"></div></div><div style="font-size:7px;color:var(--muted);margin-top:2px;">MOOD</div></div>'
         +'</div>'
       +'</div>'
     +'</div>'
-    +(newsHTML ? '<div class="brief-section"><div class="brief-sec-hdr"><span class="brief-sec-title">🗞 Actus du Jour</span><span class="brief-sec-badge">5 actus</span></div>'+newsHTML+'</div>' : '')
-    +(fxPairs ? '<div class="brief-section"><div class="brief-sec-hdr"><span class="brief-sec-title">💱 Forex · Bias du Jour</span><span class="brief-sec-badge">'+(d.forex&&d.forex.bias||'Analyse')+'</span></div>'+fxPairs+'</div>' : '')
-    +tradeHTML
-    +'<div style="padding:10px 14px;font-size:8px;color:var(--muted);text-align:center;">'+(d.disclaimer||'Analyse IA a titre informatif uniquement.')+'</div>';
+  +'</div>';
+  // Market snapshot
+  html+=snap;
+  // News
+  if(newsHTML) html+='<div style="margin:8px 12px 0;"><div style="padding:7px 0 5px;font-size:8px;font-weight:700;letter-spacing:.18em;color:var(--acc2);text-transform:uppercase;">🗞 ACTUS DU JOUR</div></div>'
+    +'<div style="background:var(--surf);border:1px solid var(--b2);margin:0 12px;">'+newsHTML+'</div>';
+  // Forex
+  if(fxHTML) html+='<div style="margin:8px 12px 0;"><div style="padding:7px 0 5px;font-size:8px;font-weight:700;letter-spacing:.18em;color:var(--acc2);text-transform:uppercase;">💱 FOREX · BIAS DU JOUR</div></div>'
+    +'<div style="background:var(--surf);border:1px solid var(--b2);margin:0 12px;">'
+    +'<div style="padding:7px 13px;border-bottom:1px solid var(--b1);font-size:9px;color:var(--txt);">'+xss(d.forex&&d.forex.reason||'')+'</div>'
+    +fxHTML+'</div>';
+  // Trade
+  html+=tradeHTML;
+  // Key levels
+  if(levelsHTML) html+='<div style="margin:8px 12px 0;"><div style="padding:7px 0 5px;font-size:8px;font-weight:700;letter-spacing:.18em;color:var(--acc2);text-transform:uppercase;">🎯 NIVEAUX CLES</div></div>'
+    +'<div style="background:var(--surf);border:1px solid var(--b2);margin:0 12px;">'+levelsHTML+'</div>';
+  // Disclaimer
+  html+='<div style="padding:12px 14px;font-size:8px;color:var(--muted);text-align:center;line-height:1.5;">Analyse IA avec donnees Twelve Data · Informatif uniquement</div>';
+
+  wrap.innerHTML=html;
 }
 
 // ── MULTI-TIMEFRAME ANALYSIS ──

@@ -1757,20 +1757,37 @@ async function loadBriefing(){
 
   // Fetch real market data first
   var fgScore=50, fgLabel='Neutre';
-  var mktData={spx:'—',spxChg:0,btc:'—',btcChg:0,gold:'—',goldChg:0,eurusd:'—',eurusdChg:0,oil:'—',oilChg:0};
+  var mktData={spx:'—',spxChg:0,btc:'—',btcChg:0,gold:'—',goldChg:0,eurusd:'—',eurusdChg:0,oil:'—',oilChg:0,bond:'—',bondChg:0};
   try{
     var fgR=await fetch('https://api.alternative.me/fng/?limit=1&format=json');
     var fgD=await fgR.json();
     if(fgD&&fgD.data&&fgD.data[0]){fgScore=parseInt(fgD.data[0].value);fgLabel=fgD.data[0].value_classification;}
   }catch(e){}
+  async function tryQuotes(syms){
+    for(var si=0;si<syms.length;si++){
+      try{var q=await getQuote(syms[si]);if(q&&q.c&&q.c>0)return q;}catch(e){}
+    }
+    return null;
+  }
   try{
-    var qSpx=await getQuote('SPX'); if(qSpx){mktData.spx=Math.round(qSpx.c).toLocaleString('fr-FR');mktData.spxChg=qSpx.dp;}
-    var qBtc=await getQuote('BTC/USD'); if(qBtc){mktData.btc=Math.round(qBtc.c).toLocaleString('fr-FR');mktData.btcChg=qBtc.dp;}
-    var qGold=await getQuote('XAU/USD'); if(qGold){mktData.gold=qGold.c.toFixed(0);mktData.goldChg=qGold.dp;}
-    var qEur=await getQuote('EUR/USD'); if(qEur){mktData.eurusd=qEur.c.toFixed(4);mktData.eurusdChg=qEur.dp;}
-    var qOil=await getQuote('WTI'); if(qOil){mktData.oil=qOil.c.toFixed(2);mktData.oilChg=qOil.dp;}
-    else { var qOil2=await getQuote('USOIL'); if(qOil2){mktData.oil=qOil2.c.toFixed(2);mktData.oilChg=qOil2.dp;} }
-  }catch(e){}
+    var qSpx=await tryQuotes(['SPX','SPY','ES=F']);
+    if(qSpx){mktData.spx=(qSpx.c>100?Math.round(qSpx.c):qSpx.c.toFixed(2)).toLocaleString('fr-FR');mktData.spxChg=qSpx.dp;}
+
+    var qBtc=await tryQuotes(['BTC/USD','BTCUSD','XBT/USD']);
+    if(qBtc){mktData.btc=Math.round(qBtc.c).toLocaleString('fr-FR');mktData.btcChg=qBtc.dp;}
+
+    var qGold=await tryQuotes(['XAU/USD','GOLD','GC=F','XAUUSD']);
+    if(qGold){mktData.gold=Math.round(qGold.c).toLocaleString('fr-FR');mktData.goldChg=qGold.dp;}
+
+    var qEur=await tryQuotes(['EUR/USD','EURUSD']);
+    if(qEur){mktData.eurusd=qEur.c.toFixed(4);mktData.eurusdChg=qEur.dp;}
+
+    var qOil=await tryQuotes(['WTI','USOIL','CL=F','USO']);
+    if(qOil){mktData.oil=qOil.c.toFixed(2);mktData.oilChg=qOil.dp;}
+
+    var qBond=await tryQuotes(['US10Y','TNX','IEF']);
+    if(qBond){mktData.bond=qBond.c.toFixed(2)+'%';mktData.bondChg=qBond.dp;}
+  }catch(e){console.log('Brief quotes error:',e);}
 
   var now=new Date();
   var today=now.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
@@ -1782,6 +1799,7 @@ async function loadBriefing(){
     +', Gold='+mktData.gold+' ('+(mktData.goldChg>=0?'+':'')+mktData.goldChg.toFixed(2)+'%)'
     +', EUR/USD='+mktData.eurusd+' ('+(mktData.eurusdChg>=0?'+':'')+mktData.eurusdChg.toFixed(2)+'%)'
     +', WTI Oil='+mktData.oil+' ('+(mktData.oilChg>=0?'+':'')+mktData.oilChg.toFixed(2)+'%)'
+    +', US 10Y Bond='+mktData.bond
     +', Fear&Greed='+fgScore+'/100 ('+fgLabel+').'
     +' RDV agenda du jour: '+getTodayEvents()+'.'
     +' Utilise ces chiffres reels. Analyse les catalyseurs macro du jour (tarifs douaniers Trump, BCE/Fed, donnees eco, geopolitique).'
@@ -1829,12 +1847,12 @@ function renderBriefing(d, fgScore, mktData, aiName){
   // Market snapshot bar
   function chgSpan(v){var up=v>=0;return '<span style="color:'+(up?'#10b981':'#ef4444');'font-size:9px;">'+(up?'▲':'▼')+Math.abs(v).toFixed(2)+'%</span>';}
   var snap='<div style="display:flex;gap:0;border-bottom:1px solid var(--b1);flex-shrink:0;overflow-x:auto;scrollbar-width:none;">'
-    +[['SPX',mktData.spx,mktData.spxChg],['BTC',mktData.btc,mktData.btcChg],['Gold',mktData.gold,mktData.goldChg],['EUR/USD',mktData.eurusd,mktData.eurusdChg],['WTI Oil',mktData.oil,mktData.oilChg]].map(function(a){
+    +[['SPX',mktData.spx,mktData.spxChg],['BTC',mktData.btc,mktData.btcChg],['Gold',mktData.gold,mktData.goldChg],['EUR/USD',mktData.eurusd,mktData.eurusdChg],['WTI',mktData.oil,mktData.oilChg],['US10Y',mktData.bond,mktData.bondChg]].map(function(a){
       var up=a[2]>=0;
-      return '<div style="flex:1;padding:7px 8px;border-right:1px solid var(--b1);text-align:center;">'
-        +'<div style="font-size:8px;color:var(--muted);margin-bottom:2px;">'+a[0]+'</div>'
-        +'<div style="font-size:11px;font-weight:600;color:#fff;">'+a[1]+'</div>'
-        +'<div style="font-size:8px;color:'+(up?'#10b981':'#ef4444')+';margin-top:1px;">'+(up?'▲':'▼')+Math.abs(a[2]).toFixed(2)+'%</div>'
+      return '<div style="flex:1;min-width:60px;padding:8px 6px;border-right:1px solid var(--b1);text-align:center;">'
+        +'<div style="font-size:10px;color:var(--muted);margin-bottom:3px;letter-spacing:.04em;">'+a[0]+'</div>'
+        +'<div style="font-size:13px;font-weight:700;color:#fff;line-height:1.2;">'+a[1]+'</div>'
+        +'<div style="font-size:10px;color:'+(up?'#10b981':'#ef4444')+';margin-top:2px;">'+(up?'▲':'▼')+Math.abs(a[2]).toFixed(2)+'%</div>'
         +'</div>';
     }).join('')
     +'</div>';
@@ -1849,8 +1867,8 @@ function renderBriefing(d, fgScore, mktData, aiName){
         +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">'
           +'<span style="font-size:7px;font-weight:700;letter-spacing:.12em;padding:1px 5px;border:1px solid '+sc+';color:'+sc+';">'+( n.tag||'NEWS')+'</span>'
         +'</div>'
-        +'<div style="font-size:11px;color:#fff;font-weight:500;line-height:1.4;margin-bottom:3px;">'+xss(n.title)+'</div>'
-        +'<div style="font-size:9px;color:var(--muted);line-height:1.5;">'+xss(n.summary)+'</div>'
+        +'<div style="font-size:14px;color:#fff;font-weight:600;line-height:1.4;margin-bottom:4px;">'+xss(n.title)+'</div>'
+        +'<div style="font-size:11px;color:var(--muted);line-height:1.5;">'+xss(n.summary)+'</div>'
       +'</div>'
     +'</div>';
   }).join('');
@@ -1861,14 +1879,14 @@ function renderBriefing(d, fgScore, mktData, aiName){
     var dn=p.bias&&p.bias.indexOf('bais')>=0;
     var col=up?'#10b981':dn?'#ef4444':'#3d5266';
     var arrow=up?'↑':dn?'↓':'→';
-    return '<div style="display:flex;align-items:center;padding:8px 13px;border-bottom:1px solid rgba(26,34,48,.5);">'
-      +'<span style="font-size:18px;margin-right:8px;color:'+col+';">'+arrow+'</span>'
+    return '<div style="display:flex;align-items:center;padding:10px 13px;border-bottom:1px solid rgba(26,34,48,.5);">'
+      +'<span style="font-size:20px;margin-right:10px;color:'+col+';">'+arrow+'</span>'
       +'<div style="flex:1;">'
-        +'<div style="font-size:11px;font-weight:600;color:#fff;">'+xss(p.pair)+'</div>'
-        +'<div style="font-size:9px;color:var(--muted);">'+xss(p.bias)+(p.target?' → '+xss(p.target):'')+'</div>'
+        +'<div style="font-size:14px;font-weight:700;color:#fff;">'+xss(p.pair)+'</div>'
+        +'<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+xss(p.bias)+(p.target?' → '+xss(p.target):'')+'</div>'
       +'</div>'
       +'<div style="text-align:right;">'
-        +'<div style="font-size:11px;color:'+col+';">'+xss(p.level)+'</div>'
+        +'<div style="font-size:14px;font-weight:600;color:'+col+';">'+xss(p.level)+'</div>'
       +'</div>'
     +'</div>';
   }).join('');
@@ -1883,13 +1901,13 @@ function renderBriefing(d, fgScore, mktData, aiName){
       +(td.timeframe?'<span style="font-size:8px;padding:1px 6px;border:1px solid var(--b2);color:var(--muted);margin-left:auto;">'+td.timeframe+'</span>':'')
     +'</div>'
     +'<div style="padding:10px 12px;">'
-      +'<div style="font-family:Syne,sans-serif;font-size:18px;font-weight:800;color:'+tdCol+';margin-bottom:5px;">'+xss(td.direction)+' '+xss(td.asset)+'</div>'
-      +'<div style="font-size:9px;color:var(--txt);line-height:1.6;margin-bottom:8px;">'+xss(td.rationale)+'</div>'
+      +'<div style="font-family:Syne,sans-serif;font-size:22px;font-weight:800;color:'+tdCol+';margin-bottom:6px;">'+xss(td.direction)+' '+xss(td.asset)+'</div>'
+      +'<div style="font-size:12px;color:var(--txt);line-height:1.6;margin-bottom:10px;">'+xss(td.rationale)+'</div>'
       +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;">'
-        +'<div style="background:var(--bg2);padding:6px 7px;"><div style="font-size:7px;color:var(--muted);margin-bottom:2px;">ENTRY</div><div style="font-size:11px;font-weight:600;color:#fff;">'+xss(td.entry)+'</div></div>'
-        +'<div style="background:var(--bg2);padding:6px 7px;"><div style="font-size:7px;color:var(--muted);margin-bottom:2px;">STOP</div><div style="font-size:11px;font-weight:600;color:#ef4444;">'+xss(td.stop)+'</div></div>'
-        +'<div style="background:var(--bg2);padding:6px 7px;"><div style="font-size:7px;color:var(--muted);margin-bottom:2px;">TARGET</div><div style="font-size:11px;font-weight:600;color:#10b981;">'+xss(td.target)+'</div></div>'
-        +'<div style="background:var(--bg2);padding:6px 7px;"><div style="font-size:7px;color:var(--muted);margin-bottom:2px;">R:R</div><div style="font-size:11px;font-weight:600;color:#fff;">'+xss(td.ratio||'—')+'</div></div>'
+        +'<div style="background:var(--bg2);padding:8px 9px;"><div style="font-size:9px;color:var(--muted);margin-bottom:3px;letter-spacing:.08em;">ENTRY</div><div style="font-size:14px;font-weight:700;color:#fff;">'+xss(td.entry)+'</div></div>'
+        +'<div style="background:var(--bg2);padding:8px 9px;"><div style="font-size:9px;color:var(--muted);margin-bottom:3px;letter-spacing:.08em;">STOP</div><div style="font-size:14px;font-weight:700;color:#ef4444;">'+xss(td.stop)+'</div></div>'
+        +'<div style="background:var(--bg2);padding:8px 9px;"><div style="font-size:9px;color:var(--muted);margin-bottom:3px;letter-spacing:.08em;">TARGET</div><div style="font-size:14px;font-weight:700;color:#10b981;">'+xss(td.target)+'</div></div>'
+        +'<div style="background:var(--bg2);padding:8px 9px;"><div style="font-size:9px;color:var(--muted);margin-bottom:3px;letter-spacing:.08em;">R:R</div><div style="font-size:14px;font-weight:700;color:#fff;">'+xss(td.ratio||'—')+'</div></div>'
       +'</div>'
       +(td.confidence?'<div style="margin-top:7px;height:3px;background:var(--dim);"><div style="height:100%;width:'+td.confidence+'%;background:'+tdCol+';transition:width .8s;"></div></div><div style="font-size:8px;color:var(--muted);margin-top:3px;">Conviction '+td.confidence+'%</div>':'')
     +'</div>'
@@ -1899,8 +1917,8 @@ function renderBriefing(d, fgScore, mktData, aiName){
   var levelsHTML=(d.keyLevels||[]).map(function(kl){
     var isRes=kl.type==='resistance';
     return '<div style="display:flex;align-items:center;padding:7px 13px;border-bottom:1px solid rgba(26,34,48,.4);">'
-      +'<div style="flex:1;font-size:10px;color:#fff;">'+xss(kl.asset)+'</div>'
-      +'<div style="font-size:10px;font-weight:600;color:'+(isRes?'#ef4444':'#10b981')+';">'+xss(kl.level)+'</div>'
+      +'<div style="flex:1;font-size:13px;color:#fff;font-weight:500;">'+xss(kl.asset)+'</div>'
+      +'<div style="font-size:13px;font-weight:700;color:'+(isRes?'#ef4444':'#10b981')+';">'+xss(kl.level)+'</div>'
       +'<div style="margin-left:8px;font-size:7px;padding:1px 5px;border:1px solid '+(isRes?'rgba(239,68,68,.3)':'rgba(16,185,129,.3)')+';color:'+(isRes?'#ef4444':'#10b981')+';">'+xss(kl.type)+'</div>'
     +'</div>';
   }).join('');
@@ -1928,17 +1946,17 @@ function renderBriefing(d, fgScore, mktData, aiName){
   // Market snapshot
   html+=snap;
   // News
-  if(newsHTML) html+='<div style="margin:8px 12px 0;"><div style="padding:7px 0 5px;font-size:8px;font-weight:700;letter-spacing:.18em;color:var(--acc2);text-transform:uppercase;">🗞 ACTUS DU JOUR</div></div>'
+  if(newsHTML) html+='<div style="margin:8px 12px 0;"><div style="padding:8px 0 6px;font-size:11px;font-weight:700;letter-spacing:.14em;color:var(--acc2);text-transform:uppercase;">🗞 ACTUS DU JOUR</div></div>'
     +'<div style="background:var(--surf);border:1px solid var(--b2);margin:0 12px;">'+newsHTML+'</div>';
   // Forex
-  if(fxHTML) html+='<div style="margin:8px 12px 0;"><div style="padding:7px 0 5px;font-size:8px;font-weight:700;letter-spacing:.18em;color:var(--acc2);text-transform:uppercase;">💱 FOREX · BIAS DU JOUR</div></div>'
+  if(fxHTML) html+='<div style="margin:8px 12px 0;"><div style="padding:8px 0 6px;font-size:11px;font-weight:700;letter-spacing:.14em;color:var(--acc2);text-transform:uppercase;">💱 FOREX · BIAS DU JOUR</div></div>'
     +'<div style="background:var(--surf);border:1px solid var(--b2);margin:0 12px;">'
     +'<div style="padding:7px 13px;border-bottom:1px solid var(--b1);font-size:9px;color:var(--txt);">'+xss(d.forex&&d.forex.reason||'')+'</div>'
     +fxHTML+'</div>';
   // Trade
   html+=tradeHTML;
   // Key levels
-  if(levelsHTML) html+='<div style="margin:8px 12px 0;"><div style="padding:7px 0 5px;font-size:8px;font-weight:700;letter-spacing:.18em;color:var(--acc2);text-transform:uppercase;">🎯 NIVEAUX CLES</div></div>'
+  if(levelsHTML) html+='<div style="margin:8px 12px 0;"><div style="padding:8px 0 6px;font-size:11px;font-weight:700;letter-spacing:.14em;color:var(--acc2);text-transform:uppercase;">🎯 NIVEAUX CLES</div></div>'
     +'<div style="background:var(--surf);border:1px solid var(--b2);margin:0 12px;">'+levelsHTML+'</div>';
   // Disclaimer
   html+='<div style="padding:12px 14px;font-size:8px;color:var(--muted);text-align:center;line-height:1.5;">Analyse via <span style="color:var(--acc2);">'+(aiName||'Groq')+'</span> · Donnees Twelve Data · Informatif uniquement</div>';

@@ -810,14 +810,24 @@ async function callAI(url, key, model, prompt, maxTok){
 var currentAI='Groq';
 async function gmFetch(prompt,maxTok){
   var now=Date.now();
-  // 1. Try Groq first
+  // 1. Try Groq - rotate through multiple free models
+  var groqModels=[
+    'llama-3.3-70b-versatile',
+    'llama-3.1-8b-instant',
+    'llama3-70b-8192',
+    'mixtral-8x7b-32768',
+    'gemma2-9b-it'
+  ];
   if(now>groqQuotaUntil){
-    var g=await callAI(GROQ_URL,GROQ_KEY,'llama-3.3-70b-versatile',prompt,maxTok||1000);
-    if(g.txt){currentAI='Groq';return g.txt;}
-    if(g.err===429){
-      groqQuotaUntil=now+90000; // block 90s
-      showAl({type:'sig',imp:'M',icon:'🔄',lbl:'IA SWITCH',title:'Groq sature — Gemini actif',detail:'Basculement automatique Groq → Gemini → OpenRouter'});
+    for(var gi=0;gi<groqModels.length;gi++){
+      var g=await callAI(GROQ_URL,GROQ_KEY,groqModels[gi],prompt,maxTok||1000);
+      if(g.txt){currentAI='Groq ('+groqModels[gi].split('-')[0]+')';return g.txt;}
+      if(g.err===429) continue; // try next Groq model
+      if(g.err&&g.err!==429) break; // other error, stop trying Groq
     }
+    // All Groq models rate limited
+    groqQuotaUntil=now+60000;
+    showAl({type:'sig',imp:'M',icon:'🔄',lbl:'IA SWITCH',title:'Groq sature — Gemini actif',detail:'Basculement Groq → Gemini → OpenRouter'});
   }
   // 2. Fallback: OpenRouter with multiple free models
   var orModels=[

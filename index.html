@@ -571,6 +571,7 @@ html,body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-siz
             <div class="fg-label" id="fg-label">Chargement...</div>
             <div class="fg-desc" id="fg-desc">Analyse sentiment marche global</div>
             <div class="fg-hist" id="fg-hist"></div>
+          <div id="fg-vix" style="margin-top:8px;display:flex;align-items:center;gap:8px;"></div>
           </div>
         </div>
       </div>
@@ -651,6 +652,9 @@ var GROQ_URL='https://api.groq.com/openai/v1/chat/completions';
 var OR_KEY='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';
 var OR_URL='https://openrouter.ai/api/v1/chat/completions';
 var groqQuotaUntil=0;
+var GM_KEY='AIzaSyCPr96oEk2OHmbFWGE82oFK__OXq0gm_H4';
+var GM_URL='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+var gmQuotaUntil=0;
 var DN=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
 var MN=['Jan','Fev','Mar','Avr','Mai','Jun','Jul','Aou','Sep','Oct','Nov','Dec'];
 var curView=0;
@@ -755,13 +759,33 @@ async function getCandles(sym){
   return [];
 }
 
+async function callGemini(prompt, maxTok){
+  if(Date.now()<gmQuotaUntil) return {err:429};
+  try{
+    var r=await fetch(GM_URL+'?key='+GM_KEY,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        contents:[{parts:[{text:prompt}]}],
+        generationConfig:{temperature:0.2,maxOutputTokens:maxTok||1000}
+      })
+    });
+    if(r.status===429){gmQuotaUntil=Date.now()+60000;return {err:429};}
+    if(!r.ok) return {err:r.status};
+    var d=await r.json();
+    var txt=d.candidates&&d.candidates[0]&&d.candidates[0].content&&d.candidates[0].content.parts&&d.candidates[0].content.parts[0]&&d.candidates[0].content.parts[0].text;
+    return txt?{txt:txt}:{err:500};
+  }catch(e){return {err:0};}
+}
+
 async function callAI(url, key, model, prompt, maxTok){
   try{
     var headers={'Content-Type':'application/json','Authorization':'Bearer '+key};
     // OpenRouter requires these headers
     if(url.indexOf('openrouter')>=0){
-      headers['HTTP-Referer']='https://kidouonline-dot.github.io';
+      headers['HTTP-Referer']='https://kidouonline-dot.github.io/signal-desk';
       headers['X-Title']='Signal Desk Pro';
+      headers['X-Description']='Trading signal app';
     }
     var r=await fetch(url,{
       method:'POST',
@@ -792,7 +816,7 @@ async function gmFetch(prompt,maxTok){
     if(g.txt){currentAI='Groq';return g.txt;}
     if(g.err===429){
       groqQuotaUntil=now+90000; // block 90s
-      showAl({type:'sig',imp:'M',icon:'🔄',lbl:'IA SWITCH',title:'Groq sature — OpenRouter actif',detail:'Basculement automatique sur modeles alternatifs'});
+      showAl({type:'sig',imp:'M',icon:'🔄',lbl:'IA SWITCH',title:'Groq sature — Gemini actif',detail:'Basculement automatique Groq → Gemini → OpenRouter'});
     }
   }
   // 2. Fallback: OpenRouter with multiple free models
@@ -809,13 +833,13 @@ async function gmFetch(prompt,maxTok){
       return o.txt;
     }
   }
-  // 3. Retry Groq once after waiting
-  if(now>groqQuotaUntil-80000){
-    await new Promise(function(r){setTimeout(r,3000);});
-    var g2=await callAI(GROQ_URL,GROQ_KEY,'llama-3.3-70b-versatile',prompt,maxTok||1000);
-    if(g2.txt){currentAI='Groq (retry)';return g2.txt;}
-  }
-  throw new Error('Services IA indisponibles. Reessayez dans 1 minute.');
+  // 3. Wait for Groq quota to reset and retry
+  showAl({type:'sig',imp:'M',icon:'⏳',lbl:'IA - Attente quota',title:'Groq saturé - attente 15s',detail:'Nouvelle tentative automatique...'});
+  await new Promise(function(r){setTimeout(r,15000);});
+  groqQuotaUntil=0;
+  var g2=await callAI(GROQ_URL,GROQ_KEY,'llama-3.3-70b-versatile',prompt,maxTok||1000);
+  if(g2.txt){currentAI='Groq (retry)';return g2.txt;}
+  throw new Error('Quota Groq atteint. Attendez 1 minute et reessayez.');
 }
 
 function ema(p,n){
@@ -1263,35 +1287,33 @@ function buildAIBubble(data,time){
 }
 
 var RSS_FEEDS=[
-  {name:'Reuters',   short:'REU', tag:'macro',  url:'https://feeds.reuters.com/reuters/businessNews'},
-  {name:'BBC Biz',   short:'BBC', tag:'macro',  url:'https://feeds.bbci.co.uk/news/business/rss.xml'},
-  {name:'CNBC',      short:'CNBC',tag:'macro',  url:'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114'},
-  {name:'MarketWatch',short:'MW', tag:'stocks', url:'https://feeds.marketwatch.com/marketwatch/topstories/'},
-  {name:'Nasdaq',    short:'NDQ', tag:'stocks', url:'https://www.nasdaq.com/feed/rssoutbound?category=Markets'},
-  {name:'GuruFocus', short:'GF',  tag:'stocks', url:'https://www.gurufocus.com/news/index.php?action=rss'},
-  {name:'Barrons',   short:'BAR', tag:'stocks', url:'https://www.barrons.com/xml/rss/3_7024.xml'},
-  {name:'CoinDesk',  short:'CD',  tag:'crypto', url:'https://www.coindesk.com/arc/outboundfeeds/rss/'},
-  {name:'CoinTele',  short:'CT',  tag:'crypto', url:'https://cointelegraph.com/rss'},
-  {name:'FX Street', short:'FX',  tag:'forex',  url:'https://www.fxstreet.com/rss/news'},
-  {name:'Investing', short:'INV', tag:'forex',  url:'https://www.investing.com/rss/news_285.rss'},
+  {name:'BBC Biz',  short:'BBC',tag:'macro', url:'https://feeds.bbci.co.uk/news/business/rss.xml'},
+  {name:'Reuters',  short:'REU',tag:'macro', url:'https://feeds.reuters.com/reuters/topNews'},
+  {name:'CNBC',     short:'CNBC',tag:'macro',url:'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=15839135'},
+  {name:'FT',       short:'FT', tag:'macro', url:'https://www.ft.com/rss/home/uk'},
+  {name:'Seeking A',short:'SA', tag:'stocks',url:'https://seekingalpha.com/feed.xml'},
+  {name:'Zacks',    short:'ZKS',tag:'stocks',url:'https://www.zacks.com/rss/newsroom.xml'},
+  {name:'Motley F', short:'MF', tag:'stocks',url:'https://www.fool.com/feeds/index.aspx'},
+  {name:'CoinDesk', short:'CD', tag:'crypto',url:'https://www.coindesk.com/arc/outboundfeeds/rss/'},
+  {name:'CoinTele', short:'CT', tag:'crypto',url:'https://cointelegraph.com/rss'},
+  {name:'Decrypt',  short:'DCR',tag:'crypto',url:'https://decrypt.co/feed'},
+  {name:'FX Street',short:'FX', tag:'forex', url:'https://www.fxstreet.com/rss/news'},
+  {name:'FX Live',  short:'FXL',tag:'forex', url:'https://www.forexlive.com/feed/news'}
 ];
 async function fetchRSSFeed(feedUrl){
-  // Try rss2json first
-  try{
-    var r1=await fetch('https://api.rss2json.com/v1/api.json?rss_url='+encodeURIComponent(feedUrl)+'&count=10');
-    if(r1.ok){
-      var d1=await r1.json();
-      if(d1&&d1.status==='ok'&&d1.items&&d1.items.length>0) return d1.items;
-    }
-  }catch(e){}
-  // Try rss2json with different count
-  try{
-    var r2=await fetch('https://api.rss2json.com/v1/api.json?rss_url='+encodeURIComponent(feedUrl)+'&count=8&api_key=public');
-    if(r2.ok){
-      var d2=await r2.json();
-      if(d2&&d2.items&&d2.items.length>0) return d2.items;
-    }
-  }catch(e){}
+  // Try rss2json
+  var proxies=[
+    'https://api.rss2json.com/v1/api.json?count=10&rss_url=',
+    'https://api.rss2json.com/v1/api.json?count=8&api_key=public&rss_url='
+  ];
+  for(var pi=0;pi<proxies.length;pi++){
+    try{
+      var r=await fetch(proxies[pi]+encodeURIComponent(feedUrl));
+      if(!r.ok) continue;
+      var d=await r.json();
+      if(d&&(d.status==='ok'||d.status==='error'&&d.items&&d.items.length>0)&&d.items&&d.items.length>0) return d.items;
+    }catch(e){}
+  }
   return [];
 }
 
@@ -1442,7 +1464,41 @@ async function loadFearGreed(){
         }).join('');
       }
     }
+    // Fetch VIX and display
+    try{
+      var vq=await tryQuotesSimple(['VIX','^VIX','VIXY']);
+      var vixEl=document.getElementById('fg-vix');
+      if(vq&&vixEl){
+        var vv=vq.c.toFixed(2);
+        var vc=vq.c>=30?'#ef4444':vq.c>=25?'#f87171':vq.c>=20?'#f59e0b':vq.c>=15?'#eab308':'#10b981';
+        var vl=vq.c>=30?'PANIQUE':vq.c>=25?'PEUR':vq.c>=20?'NERVEUX':vq.c>=15?'MODERE':'CALME';
+        var vbar=Math.min(100,vq.c/50*100);
+        vixEl.innerHTML='<div style="flex:1;">'
+          +'<div style="font-size:9px;font-weight:700;color:var(--muted);letter-spacing:.1em;margin-bottom:4px;">VIX ⚡ VOLATILITE</div>'
+          +'<div style="display:flex;align-items:center;gap:8px;">'
+            +'<div style="font-family:Syne,sans-serif;font-size:22px;font-weight:800;color:'+vc+';">'+vv+'</div>'
+            +'<div>'
+              +'<div style="font-size:11px;font-weight:700;color:'+vc+';">'+vl+'</div>'
+              +'<div style="font-size:9px;color:var(--muted);">'+(vq.dp>=0?'▲':'▼')+Math.abs(vq.dp).toFixed(2)+'% vs hier</div>'
+            +'</div>'
+          +'</div>'
+          +'<div style="height:4px;background:var(--dim);margin-top:6px;border-radius:2px;">'
+            +'<div style="height:100%;width:'+vbar+'%;background:'+vc+';border-radius:2px;transition:width .8s;"></div>'
+          +'</div>'
+          +'<div style="display:flex;justify-content:space-between;font-size:8px;color:var(--muted);margin-top:3px;">'
+            +'<span>0 Calme</span><span>15</span><span>20</span><span>30</span><span>50 Panique</span>'
+          +'</div>'
+        +'</div>';
+      }
+    }catch(ve){}
   }catch(e){if(sv)sv.textContent='N/A';}
+}
+
+async function tryQuotesSimple(syms){
+  for(var i=0;i<syms.length;i++){
+    try{var q=await getQuote(syms[i]);if(q&&q.c>0)return q;}catch(e){}
+  }
+  return null;
 }
 
 var HM_SECTORS=[
@@ -1757,7 +1813,7 @@ async function loadBriefing(){
 
   // Fetch real market data first
   var fgScore=50, fgLabel='Neutre';
-  var mktData={spx:'—',spxChg:0,btc:'—',btcChg:0,gold:'—',goldChg:0,eurusd:'—',eurusdChg:0,oil:'—',oilChg:0,bond:'—',bondChg:0};
+  var mktData={spx:'—',spxChg:0,btc:'—',btcChg:0,gold:'—',goldChg:0,eurusd:'—',eurusdChg:0,oil:'—',oilChg:0,bond:'—',bondChg:0,vix:'—',vixVal:0};
   try{
     var fgR=await fetch('https://api.alternative.me/fng/?limit=1&format=json');
     var fgD=await fgR.json();
@@ -1787,6 +1843,9 @@ async function loadBriefing(){
 
     var qBond=await tryQuotes(['US10Y','TNX','IEF']);
     if(qBond){mktData.bond=qBond.c.toFixed(2)+'%';mktData.bondChg=qBond.dp;}
+
+    var qVix=await tryQuotes(['VIX','^VIX','VIXY']);
+    if(qVix){mktData.vix=qVix.c.toFixed(2);mktData.vixVal=qVix.c;}
   }catch(e){console.log('Brief quotes error:',e);}
 
   var now=new Date();
@@ -1800,6 +1859,7 @@ async function loadBriefing(){
     +', EUR/USD='+mktData.eurusd+' ('+(mktData.eurusdChg>=0?'+':'')+mktData.eurusdChg.toFixed(2)+'%)'
     +', WTI Oil='+mktData.oil+' ('+(mktData.oilChg>=0?'+':'')+mktData.oilChg.toFixed(2)+'%)'
     +', US 10Y Bond='+mktData.bond
+    +', VIX='+mktData.vix+(mktData.vixVal>=30?' (PANIQUE - peur extreme)':mktData.vixVal>=25?' (PEUR elevee)':mktData.vixVal>=20?' (NERVEUX)':mktData.vixVal>=15?' (MODERE)':mktData.vixVal>0?' (CALME - complacence)':'')
     +', Fear&Greed='+fgScore+'/100 ('+fgLabel+').'
     +' RDV agenda du jour: '+getTodayEvents()+'.'
     +' Utilise ces chiffres reels. Analyse les catalyseurs macro du jour (tarifs douaniers Trump, BCE/Fed, donnees eco, geopolitique).'
@@ -1836,7 +1896,9 @@ function renderBriefing(d, fgScore, mktData, aiName){
   var h=now.getHours();
   var greet=h<12?'🌅 Bonjour':h<18?'☀️ Bon apres-midi':'🌙 Bonsoir';
   var today=now.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
-  var moodScore=d.moodScore||fgScore||50;
+  var vixV=mktData?mktData.vixVal:0;
+  var vixPenalty=vixV>=30?-20:vixV>=25?-12:vixV>=20?-6:vixV>=15?0:vixV>0?5:0;
+  var moodScore=Math.min(95,Math.max(5,(d.moodScore||fgScore||50)+vixPenalty));
   var moodCol=moodScore>=65?'#10b981':moodScore>=45?'#f59e0b':'#ef4444';
   var moodLabel=d.moodLabel||( moodScore>=70?'RISK ON':moodScore>=55?'MODEREMENT HAUSSIER':moodScore>=45?'NEUTRE':moodScore>=30?'RISK OFF':'RISK OFF FORT');
 
@@ -1847,12 +1909,17 @@ function renderBriefing(d, fgScore, mktData, aiName){
   // Market snapshot bar
   function chgSpan(v){var up=v>=0;return '<span style="color:'+(up?'#10b981':'#ef4444');'font-size:9px;">'+(up?'▲':'▼')+Math.abs(v).toFixed(2)+'%</span>';}
   var snap='<div style="display:flex;gap:0;border-bottom:1px solid var(--b1);flex-shrink:0;overflow-x:auto;scrollbar-width:none;">'
-    +[['SPX',mktData.spx,mktData.spxChg],['BTC',mktData.btc,mktData.btcChg],['Gold',mktData.gold,mktData.goldChg],['EUR/USD',mktData.eurusd,mktData.eurusdChg],['WTI',mktData.oil,mktData.oilChg],['US10Y',mktData.bond,mktData.bondChg]].map(function(a){
+    +[['SPX',mktData.spx,mktData.spxChg],['BTC',mktData.btc,mktData.btcChg],['Gold',mktData.gold,mktData.goldChg],['EUR/USD',mktData.eurusd,mktData.eurusdChg],['WTI',mktData.oil,mktData.oilChg],['US10Y',mktData.bond,mktData.bondChg],['VIX',mktData.vix,mktData.vixChg||0]].map(function(a){
       var up=a[2]>=0;
-      return '<div style="flex:1;min-width:60px;padding:8px 6px;border-right:1px solid var(--b1);text-align:center;">'
-        +'<div style="font-size:10px;color:var(--muted);margin-bottom:3px;letter-spacing:.04em;">'+a[0]+'</div>'
-        +'<div style="font-size:13px;font-weight:700;color:#fff;line-height:1.2;">'+a[1]+'</div>'
-        +'<div style="font-size:10px;color:'+(up?'#10b981':'#ef4444')+';margin-top:2px;">'+(up?'▲':'▼')+Math.abs(a[2]).toFixed(2)+'%</div>'
+      var isVix = a[0]==='VIX';
+      var vixLevel = isVix ? parseFloat(a[1])||0 : 0;
+      var vixCol = vixLevel>=30?'#ef4444':vixLevel>=20?'#f59e0b':vixLevel>=15?'#eab308':'#10b981';
+      var valCol = isVix ? vixCol : '#fff';
+      var chgCol = isVix ? (up?'#10b981':'#ef4444') : (up?'#10b981':'#ef4444');
+      return '<div style="flex:1;min-width:60px;padding:8px 6px;border-right:1px solid var(--b1);text-align:center;'+(isVix&&vixLevel>=25?'background:rgba(239,68,68,.06);':'')+'">'
+        +'<div style="font-size:10px;color:var(--muted);margin-bottom:3px;letter-spacing:.04em;">'+a[0]+(isVix?' ⚡':'')+'</div>'
+        +'<div style="font-size:13px;font-weight:700;color:'+valCol+';line-height:1.2;">'+a[1]+'</div>'
+        +(isVix?'<div style="font-size:9px;color:'+vixCol+';margin-top:2px;">'+(vixLevel>=30?'PANIQUE':vixLevel>=25?'PEUR':vixLevel>=20?'NERVEUX':vixLevel>=15?'MODERE':'CALME')+'</div>':'<div style="font-size:10px;color:'+chgCol+';margin-top:2px;">'+(up?'▲':'▼')+Math.abs(a[2]).toFixed(2)+'%</div>')
         +'</div>';
     }).join('')
     +'</div>';

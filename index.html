@@ -2007,11 +2007,17 @@ async function loadBriefing(){
     +'forex(bias reason pairs(array 3: pair bias level target)) '
     +'tradeIdea(setup asset direction(LONG/SHORT) timeframe entry stop target ratio rationale confidence(int)) '
     +'keyLevels(array 2: asset level type(support/resistance) note)';
-  var prompt='Tu es analyste financier senior. Morning briefing du '+today
-    +'. Donnees: '+mktLine
-    +'. FearGreed: '+fgScore+'/100 '+fgLabel
-    +'. Agenda: '+getTodayEvents()
-    +'. '+fmtDesc;
+  var prompt='Reponds en JSON valide uniquement, sans texte avant ou apres, sans markdown. '
+    +'Genere le morning briefing des marches pour '+today+'. '
+    +'Donnees: '+mktLine+'. Fear&Greed: '+fgScore+'/100 ('+fgLabel+'). VIX: '+mktData.vix+'. '
+    +'Agenda du jour: '+getTodayEvents()+'. '
+    +'JSON strictement valide avec ces cles exactes: '
+    +'{"moodScore": <entier 0-100>, "moodLabel": "<RISK ON ou RISK OFF ou NEUTRE>", '
+    +'"moodDesc": "<2 phrases sur le sentiment>", '
+    +'"news": [{"icon": "<emoji>", "title": "<titre>", "summary": "<1 phrase>", "sentiment": "<bull ou bear ou neutral>", "tag": "<MACRO ou GEO ou FOREX ou EQUITIES ou CRYPTO>"}], '
+    +'"forex": {"bias": "<biais>", "reason": "<raison>", "pairs": [{"pair": "EUR/USD", "bias": "<biais>", "level": "<niveau>", "target": "<cible>"}, {"pair": "GBP/USD", "bias": "<biais>", "level": "<niveau>", "target": "<cible>"}, {"pair": "USD/JPY", "bias": "<biais>", "level": "<niveau>", "target": "<cible>"}]}, '
+    +'"tradeIdea": {"setup": "<nom>", "asset": "<actif>", "direction": "<LONG ou SHORT>", "timeframe": "<TF>", "entry": "<prix>", "stop": "<prix>", "target": "<prix>", "ratio": "<X:1>", "rationale": "<2 phrases>", "confidence": <entier 0-100>}, '
+    +'"keyLevels": [{"asset": "<actif>", "level": "<prix>", "type": "<support ou resistance>", "note": "<note>"}]}'
 
   try{
     var raw=await gmFetch(prompt,2500);

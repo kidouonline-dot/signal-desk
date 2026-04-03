@@ -821,12 +821,12 @@ async function gmFetch(prompt,maxTok){
     for(var gi=0;gi<groqModels.length;gi++){
       var g=await callAI(GROQ_URL,GROQ_KEY,groqModels[gi],prompt,maxTok||1000);
       if(g.txt){currentAI='Groq ('+groqModels[gi].split('-')[0]+')';return g.txt;}
-      if(g.err===429) continue; // try next Groq model
-      if(g.err&&g.err!==429) break; // other error, stop trying Groq
+      if(g.err===429) continue;
+      if(g.err===401){console.log('Groq 401 - clé invalide');groqQuotaUntil=now+3600000;break;} // block 1h on 401
+      if(g.err&&g.err!==429) break;
     }
-    // All Groq models rate limited
-    groqQuotaUntil=now+60000;
-    showAl({type:'sig',imp:'M',icon:'🔄',lbl:'IA SWITCH',title:'Groq sature — Gemini actif',detail:'Basculement Groq → Gemini → OpenRouter'});
+    if(groqQuotaUntil<=now) groqQuotaUntil=now+60000;
+    console.log('Groq indisponible, bascule Gemini');
   }
   // 2. Fallback: OpenRouter with multiple free models
   var orModels=[
@@ -843,7 +843,7 @@ async function gmFetch(prompt,maxTok){
     }
   }
   // 3. Wait for Groq quota to reset and retry
-  showAl({type:'sig',imp:'M',icon:'⏳',lbl:'IA - Attente quota',title:'Groq saturé - attente 15s',detail:'Nouvelle tentative automatique...'});
+  console.log('IA: attente 15s pour reset quota Groq');
   await new Promise(function(r){setTimeout(r,15000);});
   groqQuotaUntil=0;
   var g2=await callAI(GROQ_URL,GROQ_KEY,'llama-3.3-70b-versatile',prompt,maxTok||1000);
@@ -2272,6 +2272,34 @@ function safeParseJSON(raw){
   });
   return result;
 }
+
+
+function showAl(cfg){
+  if(!cfg) return;
+  try{
+    if(navigator.vibrate) navigator.vibrate(cfg.imp==='H'?[200,100,200]:[100]);
+  }catch(e){}
+  var c=document.getElementById('alerts');
+  if(!c) return;
+  var b=document.createElement('div');
+  b.className='al'+(cfg.type==='macro'?' macro':'');
+  b.innerHTML='<span class="al-icon">'+(cfg.icon||'⚡')+'</span>'
+    +'<div class="al-body"><div class="al-lbl">'+(cfg.lbl||'')+'</div>'
+    +'<div class="al-title">'+(cfg.title||'')+'</div>'
+    +'<div class="al-detail">'+(cfg.detail||'')+'</div></div>'
+    +'<button class="al-x" onclick="this.parentElement.remove()">✕</button>'
+    +'<div class="al-prog"></div>';
+  c.appendChild(b);
+  setTimeout(function(){
+    if(b.parentElement){
+      b.style.animation='alin .3s ease-in reverse';
+      setTimeout(function(){if(b.parentElement)b.remove();},300);
+    }
+  },6000);
+}
+
+function demoSig(){showAl({type:'sig',imp:'H',icon:'⚡',lbl:'SIGNAL DEMO',title:'↓ BTC/USD SHORT 74%',detail:'Entry 67450 Stop 71200 Target 58900'});}
+function demoMacro(){showAl({type:'macro',imp:'H',icon:'🚨',lbl:'NEWS MACRO',title:'NFP: +235K vs +214K',detail:'Haussier USD - Baissier Gold'});}
 
 function hideLoad(){
   var l=document.getElementById('loading');

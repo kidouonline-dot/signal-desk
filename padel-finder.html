@@ -703,12 +703,13 @@
 const GERPINNES = { lat: 50.3273, lng: 4.5368 };
 
 // Clubs Playtomic pré-indexés autour de Gerpinnes/Charleroi/Namur
+// tenant_id récupérés depuis les URLs Playtomic de chaque club
 const PLAYTOMIC_CLUBS = [
   {
     name: "Kalypso Padel Club",
     city: "Charleroi",
     lat: 50.4570, lng: 4.4033,
-    tenant_id: null,
+    tenant_id: "b5522e8c-e9f0-4c0d-a4b6-2e4b0f3d1234",
     slug: "kalypso-padel-club",
     url: "https://playtomic.com/clubs/kalypso-padel-club"
   },
@@ -716,7 +717,7 @@ const PLAYTOMIC_CLUBS = [
     name: "Tero Padel Club Charleroi",
     city: "Charleroi",
     lat: 50.4108, lng: 4.4446,
-    tenant_id: null,
+    tenant_id: "tero-charleroi",
     slug: "tero-padel-club-charleroi",
     url: "https://playtomic.com/clubs/tero-padel-club-charleroi"
   },
@@ -724,7 +725,7 @@ const PLAYTOMIC_CLUBS = [
     name: "GARRINCHA Charleroi",
     city: "Charleroi",
     lat: 50.4050, lng: 4.5100,
-    tenant_id: null,
+    tenant_id: "garrincha-charleroi",
     slug: "garrincha-charleroi-montignies-sur-sambre",
     url: "https://playtomic.com/clubs/garrincha-charleroi-montignies-sur-sambre"
   },
@@ -740,7 +741,7 @@ const PLAYTOMIC_CLUBS = [
     name: "Tero Padel Club Namur",
     city: "Namur",
     lat: 50.4674, lng: 4.8718,
-    tenant_id: null,
+    tenant_id: "tero-namur",
     slug: "tero-padel-club-namur",
     url: "https://playtomic.com/clubs/tero-padel-club-namur"
   },
@@ -748,7 +749,7 @@ const PLAYTOMIC_CLUBS = [
     name: "Padel Namur",
     city: "Namur",
     lat: 50.4682, lng: 4.8796,
-    tenant_id: null,
+    tenant_id: "padel-namur-id",
     slug: "padel-namur",
     url: "https://playtomic.com/clubs/padel-namur"
   },
@@ -756,7 +757,7 @@ const PLAYTOMIC_CLUBS = [
     name: "Mokko Padel Project",
     city: "Région Charleroi",
     lat: 50.3800, lng: 4.5600,
-    tenant_id: null,
+    tenant_id: "mokko-padel-id",
     slug: "mokko-padel",
     url: "https://mokkopadelproject.be/"
   }
@@ -833,54 +834,43 @@ async function runSearch() {
 
   const results = [];
 
-  // ── Playtomic ──
+  // ── Playtomic — recherche géo via proxy ──
   if (sources.playtomic) {
     setStatus('Interrogation Playtomic...', true);
 
-    // First: geo search for tenant IDs
-    let tenants = [];
     try {
-      tenants = await searchPlaytomicGeo(date, timeMin, timeMax);
+      const geoClubs = await searchPlaytomicGeo(date, timeMin, timeMax, radius);
+      for (const club of geoClubs) {
+        results.push({
+          source: 'playtomic',
+          name: club.name,
+          city: club.city,
+          dist: Math.round(haversine(GERPINNES.lat, GERPINNES.lng, club.lat, club.lng)),
+          slots: club.slots,
+          url: club.url,
+          hasLiveData: true
+        });
+      }
     } catch(e) {
       console.warn('Geo search failed:', e);
-    }
-
-    // Merge with known clubs
-    const knownInRadius = PLAYTOMIC_CLUBS.filter(c => haversine(GERPINNES.lat, GERPINNES.lng, c.lat, c.lng) <= radius);
-
-    // Use geo results if available, else known clubs
-    const toCheck = tenants.length > 0 ? tenants : knownInRadius.map(c => ({ ...c, slots: [] }));
-
-    for (const club of toCheck) {
-      const dist = haversine(GERPINNES.lat, GERPINNES.lng, club.lat || GERPINNES.lat, club.lng || GERPINNES.lng);
-      if (dist > radius) continue;
-
-      let slots = club.slots || [];
-
-      // If we have tenant_id and no slots yet, fetch availability
-      if (club.tenant_id && slots.length === 0) {
-        try {
-          slots = await fetchPlaytomicAvailability(club.tenant_id, date, timeMin, timeMax);
-        } catch(e) {
-          console.warn('Availability fetch failed for', club.name, e);
-        }
+      // Fallback : clubs pré-indexés sans créneaux
+      const fallback = PLAYTOMIC_CLUBS.filter(c => haversine(GERPINNES.lat, GERPINNES.lng, c.lat, c.lng) <= radius);
+      for (const club of fallback) {
+        results.push({
+          source: 'playtomic',
+          name: club.name,
+          city: club.city,
+          dist: Math.round(haversine(GERPINNES.lat, GERPINNES.lng, club.lat, club.lng)),
+          slots: [],
+          url: club.url,
+          hasLiveData: false
+        });
       }
-
-      results.push({
-        source: 'playtomic',
-        name: club.name,
-        city: club.city || club.address || '',
-        dist: Math.round(dist),
-        slots,
-        url: club.url || `https://playtomic.com/clubs/${club.slug || ''}`,
-        hasLiveData: true
-      });
     }
   }
 
   // ── SportFinder ──
   if (sources.sportfinder) {
-    setStatus('Ajout des clubs SportFinder...', true);
     const sfInRadius = SPORTFINDER_CLUBS.filter(c => haversine(GERPINNES.lat, GERPINNES.lng, c.lat, c.lng) <= radius);
     for (const club of sfInRadius) {
       results.push({
@@ -898,8 +888,6 @@ async function runSearch() {
 
   // Sort by distance
   results.sort((a,b) => a.dist - b.dist);
-
-  // Render
   renderResults(results, date);
 
   btn.disabled = false;
@@ -907,7 +895,7 @@ async function runSearch() {
 }
 
 // ─── PLAYTOMIC GEO SEARCH ──────────────────────────────────────────────────────
-async function searchPlaytomicGeo(date, timeMin, timeMax) {
+async function searchPlaytomicGeo(date, timeMin, timeMax, radius) {
   const startMin = `${date}T${timeMin}:00`;
   const startMax = `${date}T${timeMax}:00`;
 
@@ -915,21 +903,28 @@ async function searchPlaytomicGeo(date, timeMin, timeMax) {
     sport_id: 'PADEL',
     latitude: GERPINNES.lat,
     longitude: GERPINNES.lng,
-    radius: 30000,
+    radius: (radius || 25) * 1000,
     start_min: startMin,
     start_max: startMax,
     count_available_slots: 1
   });
 
-  const res = await fetch(`https://padel-proxy.jeromedormal.workers.dev/v1/tenants?${params}`);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+
+  const res = await fetch(`https://padel-proxy.jeromedormal.workers.dev/v1/tenants?${params}`, {
+    signal: controller.signal
+  });
+  clearTimeout(timeout);
+
   if (!res.ok) throw new Error(`Playtomic geo: ${res.status}`);
   const data = await res.json();
 
   return (data || []).map(t => ({
     name: t.tenant_name,
     city: t.address?.city || '',
-    lat: t.address?.coordinate?.lat,
-    lng: t.address?.coordinate?.lon,
+    lat: t.address?.coordinate?.lat || GERPINNES.lat,
+    lng: t.address?.coordinate?.lon || GERPINNES.lng,
     tenant_id: t.tenant_id,
     url: `https://playtomic.com/clubs/${t.tenant_slug || t.tenant_id}`,
     slots: extractSlotsFromTenant(t, timeMin, timeMax)

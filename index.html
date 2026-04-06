@@ -650,9 +650,9 @@ var GROQ_KEY='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';
 var GROQ_URL='https://api.groq.com/openai/v1/chat/completions';
 var OR_KEY='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';
 var OR_URL='https://openrouter.ai/api/v1/chat/completions';
-var groqQuotaUntil=0;
+var groqQuotaUntil=0; // reset on every page load
 var GM_KEY='AIzaSyCPr96oEk2OHmbFWGE82oFK__OXq0gm_H4';
-var GM_URL='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+var GM_URL='https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 var gmQuotaUntil=0;
 var DN=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
 var MN=['Jan','Fev','Mar','Avr','Mai','Jun','Jul','Aou','Sep','Oct','Nov','Dec'];
@@ -822,7 +822,7 @@ async function gmFetch(prompt,maxTok){
       var g=await callAI(GROQ_URL,GROQ_KEY,groqModels[gi],prompt,maxTok||1000);
       if(g.txt){currentAI='Groq ('+groqModels[gi].split('-')[0]+')';return g.txt;}
       if(g.err===429) continue;
-      if(g.err===401){console.log('Groq 401 - clé invalide');groqQuotaUntil=now+3600000;break;} // block 1h on 401
+      if(g.err===401){console.log('Groq 401 - clé invalide, skip');break;} // skip Groq, try Gemini
       if(g.err&&g.err!==429) break;
     }
     if(groqQuotaUntil<=now) groqQuotaUntil=now+60000;

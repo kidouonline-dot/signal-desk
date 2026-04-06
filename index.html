@@ -784,7 +784,6 @@ async function callAI(url, key, model, prompt, maxTok){
     if(url.indexOf('openrouter')>=0){
       headers['HTTP-Referer']='https://kidouonline-dot.github.io/signal-desk';
       headers['X-Title']='Signal Desk Pro';
-      headers['X-Description']='Trading signal app';
     }
     var r=await fetch(url,{
       method:'POST',
@@ -808,47 +807,28 @@ async function callAI(url, key, model, prompt, maxTok){
 
 var currentAI='Groq';
 async function gmFetch(prompt,maxTok){
+  // Chain: Gemini first → Groq fallback
+  // OpenRouter disabled (CORS blocked from GitHub Pages)
+
+  // 1. Gemini 1.5 Flash (free, reliable)
+  var gem=await callGemini(prompt,maxTok||1000);
+  if(gem.txt){currentAI='Gemini';return gem.txt;}
+  console.log('Gemini failed:',gem.err);
+
+  // 2. Groq (multiple free models)
   var now=Date.now();
-  // 1. Try Groq - rotate through multiple free models
-  var groqModels=[
-    'llama-3.3-70b-versatile',
-    'llama-3.1-8b-instant',
-    'llama3-70b-8192',
-    'mixtral-8x7b-32768',
-    'gemma2-9b-it'
-  ];
   if(now>groqQuotaUntil){
+    var groqModels=['llama-3.3-70b-versatile','llama-3.1-8b-instant','mixtral-8x7b-32768','gemma2-9b-it'];
     for(var gi=0;gi<groqModels.length;gi++){
       var g=await callAI(GROQ_URL,GROQ_KEY,groqModels[gi],prompt,maxTok||1000);
-      if(g.txt){currentAI='Groq ('+groqModels[gi].split('-')[0]+')';return g.txt;}
+      if(g.txt){currentAI='Groq';return g.txt;}
+      if(g.err===401){groqQuotaUntil=now+3600000;console.log('Groq 401 clé invalide');break;}
       if(g.err===429) continue;
-      if(g.err===401){console.log('Groq 401 - clé invalide, skip');break;} // skip Groq, try Gemini
-      if(g.err&&g.err!==429) break;
-    }
-    if(groqQuotaUntil<=now) groqQuotaUntil=now+60000;
-    console.log('Groq indisponible, bascule Gemini');
-  }
-  // 2. Fallback: OpenRouter with multiple free models
-  var orModels=[
-    'meta-llama/llama-3.3-70b-instruct:free',
-    'mistralai/mistral-7b-instruct:free',
-    'microsoft/phi-3-mini-128k-instruct:free',
-    'google/gemma-3-4b-it:free'
-  ];
-  for(var mi=0;mi<orModels.length;mi++){
-    var o=await callAI(OR_URL,OR_KEY,orModels[mi],prompt,maxTok||1000);
-    if(o.txt){
-      currentAI='OpenRouter ('+orModels[mi].split('/')[1]+')';
-      return o.txt;
+      break;
     }
   }
-  // 3. Wait for Groq quota to reset and retry
-  console.log('IA: attente 15s pour reset quota Groq');
-  await new Promise(function(r){setTimeout(r,15000);});
-  groqQuotaUntil=0;
-  var g2=await callAI(GROQ_URL,GROQ_KEY,'llama-3.3-70b-versatile',prompt,maxTok||1000);
-  if(g2.txt){currentAI='Groq (retry)';return g2.txt;}
-  throw new Error('Quota Groq atteint. Attendez 1 minute et reessayez.');
+
+  throw new Error('Gemini et Groq indisponibles. Verifiez vos cles API dans Reglages.');
 }
 
 function ema(p,n){

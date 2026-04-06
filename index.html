@@ -1976,7 +1976,7 @@ async function loadBriefing(){
   wrap.innerHTML='<div class="brief-loading"><div class="bl-icon">🌅</div><div class="bl-title">Morning Briefing</div><div class="bl-sub">Chargement donnees marche...<br><span id="ai-name-brief">Groq</span></div><div class="bl-prog"><div class="bl-fill"></div></div></div>';
 
   var fgScore=50,fgLabel='Neutre';
-  var mktData={spx:'—',spxChg:0,btc:'—',btcChg:0,gold:'—',goldChg:0,eurusd:'—',eurusdChg:0,oil:'—',oilChg:0,bond:'—',bondChg:0,vix:'—',vixVal:0};
+  var mktData={spx:'—',spxChg:0,btc:'—',btcChg:0,gold:'—',goldChg:0,eurusd:'—',eurusdChg:0,oil:'—',oilChg:0,bond:'—',bondChg:0,vix:'—',vixVal:0,jgb:'—',jgbChg:0,usdjpy:'—',usdjpyChg:0};
 
   try{
     var fgR=await fetch('https://api.alternative.me/fng/?limit=1&format=json');
@@ -1999,17 +1999,21 @@ async function loadBriefing(){
   var today=now.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   var vixCtx=mktData.vixVal>=30?' VIX PANIQUE':mktData.vixVal>=25?' VIX PEUR':mktData.vixVal>=20?' VIX NERVEUX':mktData.vixVal>0?' VIX CALME':'';
 
+  var jgbCtx=mktData.jgb!=='—'?' JGB10Y '+mktData.jgb+(mktData.jgbChg>0?' (HAUSSE - tension BoJ/Yen)':mktData.jgbChg<0?' (BAISSE)':''):'';
   var mktLine='SPX '+mktData.spx+' BTC '+mktData.btc+' Gold '+mktData.gold
     +' EURUSD '+mktData.eurusd+' WTI '+mktData.oil+' US10Y '+mktData.bond
+    +jgbCtx+' USDJPY '+mktData.usdjpy
     +' VIX '+mktData.vix+(mktData.vixVal>=30?' PANIQUE':mktData.vixVal>=25?' PEUR':mktData.vixVal>=20?' NERVEUX':mktData.vixVal>=15?' MODERE':' CALME');
   var fmtDesc='JSON only no markdown. Fields: moodScore(int 0-100) moodLabel(RISK ON or RISK OFF or NEUTRE) moodDesc(2 phrases) '
     +'news(array 5: icon title summary sentiment(bull/bear/neutral) tag(MACRO/GEO/FOREX/EQUITIES/CRYPTO)) '
     +'forex(bias reason pairs(array 3: pair bias level target)) '
     +'tradeIdea(setup asset direction(LONG/SHORT) timeframe entry stop target ratio rationale confidence(int)) '
     +'keyLevels(array 2: asset level type(support/resistance) note)';
+  var jgbWarning=mktData.jgb!=='—'&&parseFloat(mktData.jgb)>1.5?' ATTENTION: JGB 10Y japonais à '+mktData.jgb+' niveau historique - risque de débouclage du carry trade USD/JPY, impact potentiel sur actifs risqués mondiaux.':'';
   var prompt='Reponds en JSON valide uniquement, sans texte avant ou apres, sans markdown. '
     +'Genere le morning briefing des marches pour '+today+'. '
     +'Donnees: '+mktLine+'. Fear&Greed: '+fgScore+'/100 ('+fgLabel+'). VIX: '+mktData.vix+'. '
+    +jgbWarning+' '
     +'Agenda du jour: '+getTodayEvents()+'. '
     +'JSON strictement valide avec ces cles exactes: '
     +'{"moodScore": <entier 0-100>, "moodLabel": "<RISK ON ou RISK OFF ou NEUTRE>", '
@@ -2056,7 +2060,7 @@ function renderBriefing(d,fgScore,mktData,aiName){
   var R=32,C=2*Math.PI*R,off=C-(moodScore/100)*C;
   var gauge='<svg width="84" height="84" style="flex-shrink:0"><circle cx="42" cy="42" r="'+R+'" fill="none" stroke="#1c2a38" stroke-width="8"/><circle cx="42" cy="42" r="'+R+'" fill="none" stroke="'+moodCol+'" stroke-width="8" stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" stroke-linecap="round" transform="rotate(-90 42 42)"/><text x="42" y="38" text-anchor="middle" font-family="Syne" font-size="18" font-weight="800" fill="'+moodCol+'">'+moodScore+'</text><text x="42" y="52" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#3d5266">/100</text></svg>';
   var snap='<div style="display:flex;border-bottom:1px solid var(--b1);flex-shrink:0;overflow-x:auto;scrollbar-width:none;">'
-    +[['SPX',mktData.spx,mktData.spxChg],['BTC',mktData.btc,mktData.btcChg],['Gold',mktData.gold,mktData.goldChg],['EUR/USD',mktData.eurusd,mktData.eurusdChg],['WTI',mktData.oil,mktData.oilChg],['US10Y',mktData.bond,mktData.bondChg],['VIX',mktData.vix,0]].map(function(a){
+    +[['SPX',mktData.spx,mktData.spxChg],['BTC',mktData.btc,mktData.btcChg],['Gold',mktData.gold,mktData.goldChg],['EUR/USD',mktData.eurusd,mktData.eurusdChg],['WTI',mktData.oil,mktData.oilChg],['US10Y',mktData.bond,mktData.bondChg],['JGB 10Y',mktData.jgb,mktData.jgbChg],['USD/JPY',mktData.usdjpy,mktData.usdjpyChg],['VIX',mktData.vix,0]].map(function(a){
       var up=a[2]>=0;
       var isVix=a[0]==='VIX';
       var vv=isVix?parseFloat(a[1])||0:0;
